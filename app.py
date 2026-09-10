@@ -58,7 +58,9 @@ st.markdown("""
 # 2. DADOS DA EQUIPE E LOCALIDADES
 # ---------------------------------------------------------
 GESTOR_OFICIAL = "DANILO DA SILVA VILAS BOAS"
-SENHA_GESTOR = "anima2026"
+
+if "senha_gestor" not in st.session_state:
+    st.session_state["senha_gestor"] = "1234"
 
 EQUIPE_DETALHES = {
     "DANILO DA SILVA VILAS BOAS": {"estado": "SP", "local": "São Paulo - SP", "cargo": "Gestor", "inic": "DV"},
@@ -69,7 +71,6 @@ EQUIPE_DETALHES = {
 }
 EQUIPE = list(EQUIPE_DETALHES.keys())
 
-# Inicialização com tratamento de segurança para evitar qualquer KeyError
 if "agendamentos" not in st.session_state:
     st.session_state["agendamentos"] = [
         {
@@ -212,7 +213,7 @@ with aba_painel:
         st.info("Nenhuma ausência confirmada no momento.")
 
 # ---------------------------------------------------------
-# ABA 2: NOVA SOLICITAÇÃO
+# ABA 2: NOVA SOLICITAÇÃO (Corrigido para exibir corretamente Dias vs Horas)
 # ---------------------------------------------------------
 with aba_solicitar:
     st.subheader("Registrar Nova Solicitação de Ausência")
@@ -222,38 +223,37 @@ with aba_solicitar:
         solicitante = perfil_usuario
         st.write(f"✍️ Solicitante: **{solicitante}**")
 
-        tipo = st.radio("Modalidade", ["Férias", "Banco de Horas / Abono", "Folga de Aniversário"], horizontal=True)
+        # Sem folga de aniversário, apenas Férias ou Banco de Horas
+        tipo = st.radio("Modalidade", ["Férias", "Banco de Horas / Abono"], horizontal=True)
         modo_tempo = st.radio("Duração da Ausência", ["Dias Inteiros", "Horário Específico (Parcial)"], horizontal=True)
         
+        # Lógica condicional exata para não misturar os campos
         if modo_tempo == "Dias Inteiros":
             c1, c2 = st.columns(2)
             with c1:
                 dt_inicio = st.date_input("Data de Início", datetime.date.today())
             with c2:
-                if tipo == "Férias":
-                    qnt_dias = st.number_input("Quantidade de Dias", min_value=1, max_value=30, value=10, step=1)
-                    dt_fim = dt_inicio + datetime.timedelta(days=int(qnt_dias) - 1)
-                else:
-                    dt_fim = st.date_input("Data de Término", dt_inicio)
-                    qnt_dias = max(1, (dt_fim - dt_inicio).days + 1)
-
+                qnt_dias = st.number_input("Quantidade de Dias", min_value=1, max_value=30, value=10, step=1)
+            
+            dt_fim = dt_inicio + datetime.timedelta(days=int(qnt_dias) - 1)
             retorno = dt_fim + datetime.timedelta(days=1)
             detalhe_str = f"{int(qnt_dias)} dias"
-            st.markdown(f"💡 **Previsão de Retorno:** {retorno.strftime('%d/%m/%Y')} ({int(qnt_dias)} dias ausente)")
+            st.markdown(f"💡 **Período de Ausência:** De {dt_inicio.strftime('%d/%m/%Y')} até {dt_fim.strftime('%d/%m/%Y')} ({int(qnt_dias)} dias). Retorno em: {retorno.strftime('%d/%m/%Y')}")
         else:
+            # Horário Específico (Parcial) -> Some os dias e aparecem as horas
             dt_inicio = st.date_input("Data da Ausência", datetime.date.today())
             dt_fim = dt_inicio
             
             c_h1, c_h2 = st.columns(2)
             with c_h1:
-                hora_inicio = st.time_input("Horário de Início", datetime.time(9, 0))
+                hora_inicio = st.time_input("Horário de Início da Ausência", datetime.time(9, 0))
             with c_h2:
                 hora_fim = st.time_input("Horário de Retorno", datetime.time(12, 0))
             
             detalhe_str = f"Das {hora_inicio.strftime('%H:%M')} às {hora_fim.strftime('%H:%M')}"
             st.markdown(f"💡 **Resumo do Horário:** Ausente no dia {dt_inicio.strftime('%d/%m/%Y')} ({detalhe_str})")
 
-        justificativa = st.text_area("Justificativa / Motivo", placeholder="Ex: Consulta médica, compromisso pessoal...")
+        justificativa = st.text_area("Justificativa / Motivo", placeholder="Ex: Consulta médica, compromisso pessoal, descanso...")
         
         erros, avisos = checar_regras(solicitante, dt_inicio, dt_fim)
         bloqueio = False
@@ -296,9 +296,19 @@ with aba_gestor:
     st.subheader("Área Restrita do Gestor")
     st.caption("Insira a senha de acesso para gerenciar as aprovações da equipe.")
     
-    senha_digitada = st.text_input("Senha de Acesso do Gestor", type="password", placeholder="Digite a senha...")
+    with st.expander("🔑 Configurar ou Alterar Senha de Acesso (Gestor)", expanded=False):
+        nova_senha_input = st.text_input("Definir Nova Senha para o Painel", type="password", placeholder="Digite a nova senha...")
+        if st.button("Salvar Nova Senha"):
+            if nova_senha_input.strip() != "":
+                st.session_state["senha_gestor"] = nova_senha_input.strip()
+                st.success("✅ Senha atualizada com sucesso! Use esta nova senha para entrar.")
+            else:
+                st.error("A senha não pode estar em branco.")
+
+    st.markdown("---")
+    senha_digitada = st.text_input("Digite a Senha de Acesso", type="password", placeholder="Insira a senha do gestor...")
     
-    if senha_digitada == SENHA_GESTOR:
+    if senha_digitada == st.session_state["senha_gestor"]:
         st.success("✅ Acesso autorizado!")
         st.markdown(f"### Painel Gerencial de {GESTOR_OFICIAL}")
         
@@ -347,4 +357,4 @@ with aba_gestor:
     elif senha_digitada != "":
         st.error("❌ Senha incorreta. Apenas o gestor autorizado possui a senha de acesso.")
     else:
-        st.info("🔒 Por favor, digite a senha para visualizar o painel gerencial.")
+        st.info("🔒 Por favor, digite a senha para visualizar o painel gerencial. (Dica: A senha inicial padrão é **1234**, e você pode alterá-la na caixinha acima a qualquer momento).")
