@@ -71,21 +71,11 @@ EQUIPE_DETALHES = {
 }
 EQUIPE = list(EQUIPE_DETALHES.keys())
 
+# Apenas o agendamento do Kelvyn mantido inicialmente
 if "agendamentos" not in st.session_state:
     st.session_state["agendamentos"] = [
         {
             "id": 1,
-            "colaborador": "JOYCE ADRIELLE DIAS DA SILVA",
-            "tipo": "Férias",
-            "modo": "Dias Inteiros",
-            "inicio": datetime.date(2024, 12, 10),
-            "fim": datetime.date(2025, 12, 9),
-            "detalhe_tempo": "365 dias",
-            "justificativa": "Férias anuais programadas",
-            "status": "Aprovado"
-        },
-        {
-            "id": 2,
             "colaborador": "KELVYN AMARAL CANDIDO",
             "tipo": "Férias",
             "modo": "Dias Inteiros",
@@ -213,7 +203,7 @@ with aba_painel:
         st.info("Nenhuma ausência confirmada no momento.")
 
 # ---------------------------------------------------------
-# ABA 2: NOVA SOLICITAÇÃO (Calendário Início/Fim perfeito)
+# ABA 2: NOVA SOLICITAÇÃO
 # ---------------------------------------------------------
 with aba_solicitar:
     st.subheader("Registrar Nova Solicitação de Ausência")
@@ -226,6 +216,10 @@ with aba_solicitar:
         tipo = st.radio("Modalidade", ["Férias", "Banco de Horas / Abono"], horizontal=True)
         modo_tempo = st.radio("Duração da Ausência", ["Dias Inteiros (Início e Fim)", "Horário Específico (Parcial)"], horizontal=True)
         
+        dt_inicio = datetime.date.today()
+        dt_fim = datetime.date.today()
+        detalhe_str = ""
+        
         if modo_tempo == "Dias Inteiros (Início e Fim)":
             c1, c2 = st.columns(2)
             with c1:
@@ -233,7 +227,6 @@ with aba_solicitar:
             with c2:
                 dt_fim = st.date_input("Data de Término", datetime.date.today() + datetime.timedelta(days=5))
             
-            # Cálculo matemático exato baseado nas datas reais selecionadas no calendário
             if dt_fim >= dt_inicio:
                 qnt_dias = (dt_fim - dt_inicio).days + 1
             else:
@@ -243,14 +236,12 @@ with aba_solicitar:
             detalhe_str = f"{qnt_dias} dias"
             
             if qnt_dias > 0:
-                st.markdown(f"💡 **Resumo:** De **{dt_inicio.strftime('%d/%m/%Y')}** até **{dt_fim.strftime('%d/%m/%Y')}** (**{qnt_dias} dias** no total). Retorno em: {retorno.strftime('%d/%m/%Y')}")
+                st.markdown(f"💡 **Resumo Dinâmico:** De **{dt_inicio.strftime('%d/%m/%Y')}** até **{dt_fim.strftime('%d/%m/%Y')}** (**{qnt_dias} dias** no total). Retorno em: {retorno.strftime('%d/%m/%Y')}")
             else:
                 st.error("❌ A data de término deve ser igual ou posterior à data de início.")
         else:
-            # Modo Parcial (Abre o relógio/horários apenas aqui)
             dt_inicio = st.date_input("Data da Ausência", datetime.date.today())
             dt_fim = dt_inicio
-            qnt_dias = 1
             
             c_h1, c_h2 = st.columns(2)
             with c_h1:
@@ -370,4 +361,3 @@ with aba_gestor:
         st.error("❌ Senha incorreta. Apenas o gestor autorizado possui a senha de acesso.")
     else:
         st.info("🔒 Por favor, digite a senha para visualizar o painel gerencial. (Dica: A senha inicial padrão é **1234**, e você pode alterá-la na caixinha acima a qualquer momento).")
-            
