@@ -7,19 +7,18 @@ import holidays
 # 1. CONFIGURAÇÃO DA PÁGINA (Layout Profissional)
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="Portal de Férias & Ausências | Planejamento",
+    page_title="Portal de Férias & Ausências | Ânima",
     page_icon="🌴",
     layout="wide"
 )
 
-# Estilização Clean & Modern UI (Padrão corporativo moderno com tons Ânima)
+# Estilização Clean & Modern UI (Padrão Ânima com destaque para feriados)
 st.markdown("""
     <style>
     .stApp { background-color: #0F172A; color: #F8FAFC; }
     h1 { color: #F3E8FF !important; font-weight: 800; font-size: 1.8rem !important; }
     h2, h3 { color: #E9D5FF !important; font-weight: 700; }
     
-    /* Cartões Modernos */
     .anima-card {
         background-color: #1E1B4B;
         padding: 18px;
@@ -29,7 +28,16 @@ st.markdown("""
         margin-bottom: 12px;
     }
     
-    /* Botões */
+    .holiday-badge {
+        background-color: #831843;
+        color: #F43F5E;
+        padding: 3px 8px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: bold;
+        border: 1px solid #9F1239;
+    }
+    
     .stButton>button {
         background-color: #7C3AED;
         color: white;
@@ -47,44 +55,55 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 2. DADOS DA EQUIPE E CONFIGURAÇÕES
+# 2. DADOS DA EQUIPE E LOCALIDADES CORRIGIDAS
 # ---------------------------------------------------------
 GESTOR_OFICIAL = "DANILO DA SILVA VILAS BOAS"
+SENHA_GESTOR = "anima2026"
 
 EQUIPE_DETALHES = {
-    "ERIKA LIMA DE OLIVEIRA": {"estado": "SP", "cargo": "Analista", "inic": "EO"},
-    "JOYCE ADRIELLE DIAS DA SILVA": {"estado": "BA", "cargo": "Analista", "inic": "JD"},
-    "KELVYN AMARAL CANDIDO": {"estado": "MG", "cargo": "Analista", "inic": "KC"},
-    "GABRIELA HELEN SANTOS XAVIER": {"estado": "BA", "cargo": "Analista de Dados", "inic": "GX"}
+    "DANILO DA SILVA VILAS BOAS": {"estado": "SP", "local": "São Paulo - SP", "cargo": "Gestor", "inic": "DV"},
+    "ERIKA LIMA DE OLIVEIRA": {"estado": "MG", "local": "Belo Horizonte - MG", "cargo": "Analista", "inic": "EO"},
+    "JOYCE ADRIELLE DIAS DA SILVA": {"estado": "BA", "local": "Bahia (Salvador / Feira)", "cargo": "Analista", "inic": "JD"},
+    "KELVYN AMARAL CANDIDO": {"estado": "MG", "local": "Belo Horizonte - MG", "cargo": "Analista", "inic": "KC"},
+    "GABRIELA HELEN SANTOS XAVIER": {"estado": "BA", "local": "Bahia (Salvador / Feira)", "cargo": "Analista de Dados", "inic": "GX"}
 }
 EQUIPE = list(EQUIPE_DETALHES.keys())
 
-# Banco de dados na sessão (Garante persistência durante o uso)
 if "agendamentos" not in st.session_state:
     st.session_state["agendamentos"] = [
         {
             "id": 1,
             "colaborador": "JOYCE ADRIELLE DIAS DA SILVA",
             "tipo": "Férias",
+            "modo": "Dias Inteiros",
             "inicio": datetime.date(2026, 11, 10),
             "fim": datetime.date(2026, 11, 20),
-            "dias": 11,
+            "detalhe_tempo": "11 dias",
             "justificativa": "Descanso anual programado",
             "status": "Aprovado"
         }
     ]
 
-# Função para validar feriados e conflitos
 def checar_regras(nome_colaborador, dt_inicio, dt_fim):
     detalhes = EQUIPE_DETALHES[nome_colaborador]
     feriados_br = holidays.BR(years=dt_inicio.year, subdiv=detalhes["estado"])
     erros, avisos = [], []
     
     if dt_inicio in feriados_br:
-        erros.append(f"A data de início cai no feriado: {feriados_br.get(dt_inicio)}. Escolha um dia útil.")
+        erros.append(f"A data de início cai no feriado nacional/estadual: '{feriados_br.get(dt_inicio)}'. Não é permitido iniciar ausências em feriados.")
     if dt_inicio.weekday() >= 5:
-        erros.append("O início das férias não pode cair em finais de semana.")
+        erros.append("O início das ausências não pode cair em finais de semana.")
         
+    feriados_no_periodo = []
+    atual = dt_inicio
+    while atual <= dt_fim:
+        if atual in feriados_br:
+            feriados_no_periodo.append(f"{atual.strftime('%d/%m/%Y')} ({feriados_br.get(atual)})")
+        atual += datetime.timedelta(days=1)
+        
+    if feriados_no_periodo:
+        avisos.append(f"Feriado(s) identificado(s) no meio do período: {', '.join(feriados_no_periodo)}.")
+
     for reg in st.session_state["agendamentos"]:
         if reg["colaborador"] != nome_colaborador and reg["status"] == "Aprovado":
             if dt_inicio <= reg["fim"] and dt_fim >= reg["inicio"]:
@@ -95,32 +114,31 @@ def checar_regras(nome_colaborador, dt_inicio, dt_fim):
 # 3. INTERFACE PRINCIPAL
 # ---------------------------------------------------------
 st.title("🌴 Portal de Férias & Ausências")
-st.caption(f"Ecossistema de Controle e Retenção Nacional — Equipe & Gestão ({GESTOR_OFICIAL.split()[0]})")
+st.caption(f"Ecossistema de Controle e Retenção Nacional — Ânima Educação")
 st.divider()
 
-# Barra lateral para identificação de quem está acessando (Simulação de Perfil)
 with st.sidebar:
-    st.markdown("### 👤 Sessão Atual")
+    st.markdown("### 👤 Identificação")
     perfil_usuario = st.selectbox(
-        "Você é:", 
-        [GESTOR_OFICIAL] + EQUIPE
+        "Quem está acessando?", 
+        EQUIPE
     )
-    st.info(f"Logado como: **{perfil_usuario.split()[0]}**")
+    local_atual = EQUIPE_DETALHES[perfil_usuario]["local"]
+    st.info(f"Logado como: **{perfil_usuario.split()[0]}**\n📍 Base: {local_atual}")
     st.markdown("---")
-    st.markdown("📌 **Regras Rápidas:**\n- Sem início em feriados/fins de semana.\n- Verificação automática de conflitos na equipe.")
+    st.markdown("📌 **Regras & Feriados por Estado:**\n- Danilo: SP\n- Erika & Kelvyn: MG\n- Gabriela & Joyce: BA\n- Bloqueio automático de início em feriados e fins de semana.")
 
-# Abas Limpas e Organizadas
 aba_painel, aba_solicitar, aba_gestor = st.tabs([
-    "📊 Calendário & Equipe", 
+    "📊 Calendário & Feriados", 
     "➕ Nova Solicitação", 
-    f"⚙️ Painel do Gestor {'🔒' if perfil_usuario != GESTOR_OFICIAL else ''}"
+    f"⚙️ Painel do Gestor 🔒"
 ])
 
 # ---------------------------------------------------------
-# ABA 1: CALENDÁRIO & VISÃO GERAL DA EQUIPE
+# ABA 1: CALENDÁRIO, EQUIPE E FERIADOS DESTACADOS
 # ---------------------------------------------------------
 with aba_painel:
-    st.subheader("Painel de Controle da Equipe")
+    st.subheader("Painel de Controle & Calendário da Equipe")
     
     col1, col2, col3 = st.columns(3)
     total_aprovados = sum(1 for r in st.session_state["agendamentos"] if r["status"] == "Aprovado")
@@ -131,6 +149,19 @@ with aba_painel:
     col3.metric("Membros Monitorados", len(EQUIPE))
     
     st.write("")
+    
+    # Exibe os feriados oficiais da base do usuário logado
+    with st.expander(f"📅 Ver Feriados Nacionais e Estaduais para {local_atual} (Ano 2026)", expanded=False):
+        feriados_usuario = holidays.BR(years=2026, subdiv=EQUIPE_DETALHES[perfil_usuario]["estado"])
+        feriados_futuros = {d: n for d, n in sorted(feriados_usuario.items()) if d >= datetime.date.today()}
+        
+        cols_f = st.columns(2)
+        idx = 0
+        for data_f, nome_f in list(feriados_futuros.items())[:10]:
+            with cols_f[idx % 2]:
+                st.markdown(f"🔴 **{data_f.strftime('%d/%m/%Y')}** — <span class='holiday-badge'>{nome_f}</span>", unsafe_allow_html=True)
+            idx += 1
+
     st.markdown("### 📅 Linha do Tempo e Ausências da Equipe")
     st.caption("Consulte abaixo quem estará ausente para evitar conflitos de cobertura.")
     
@@ -139,6 +170,12 @@ with aba_painel:
     if agendamentos_ativos:
         for reg in agendamentos_ativos:
             inic = EQUIPE_DETALHES.get(reg['colaborador'], {}).get('inic', 'COL')
+            
+            if reg.get("modo") == "Horas Parciais":
+                info_tempo = f"⏰ Horário: {reg['detalhe_tempo']} em {reg['inicio'].strftime('%d/%m/%Y')}"
+            else:
+                info_tempo = f"📅 De {reg['inicio'].strftime('%d/%m/%Y')} até {reg['fim'].strftime('%d/%m/%Y')} ({reg['detalhe_tempo']})"
+
             st.markdown(f"""
                 <div class="anima-card">
                     <div style="display: flex; align-items: center; justify-content: space-between;">
@@ -146,7 +183,7 @@ with aba_painel:
                             <span style="background-color: #7C3AED; color: white; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: bold;">{inic}</span>
                             <b style="font-size: 15px; color: #F8FAFC; margin-left: 8px;">{reg['colaborador']}</b>
                             <p style="margin: 6px 0 0 0; color: #CBD5E1; font-size: 13px;">
-                                📌 <b>{reg['tipo']}</b> ({reg['dias']} dias) | 📅 De <b>{reg['inicio'].strftime('%d/%m/%Y')}</b> até <b>{reg['fim'].strftime('%d/%m/%Y')}</b>
+                                📌 <b>{reg['tipo']}</b> | {info_tempo}
                             </p>
                             <p style="margin: 4px 0 0 0; color: #C084FC; font-size: 12px; font-style: italic;">
                                 💬 Justificativa: "{reg['justificativa']}"
@@ -162,39 +199,49 @@ with aba_painel:
         st.info("Nenhuma ausência confirmada no momento.")
 
 # ---------------------------------------------------------
-# ABA 2: NOVA SOLICITAÇÃO (Simples, Didática e Sem Fricção)
+# ABA 2: NOVA SOLICITAÇÃO
 # ---------------------------------------------------------
 with aba_solicitar:
     st.subheader("Registrar Nova Solicitação de Ausência")
-    st.caption("Preencha os campos abaixo. O sistema valida automaticamente feriados e choques na equipe.")
+    st.caption(f"Base operacional do solicitante: **{local_atual}** (Validação de feriados estaduais ativa).")
     
     with st.form("form_solicitacao_limpo"):
-        # Se estiver logado como gestor na barra lateral, permite escolher; se for colaborador, assume o nome dele
-        if perfil_usuario == GESTOR_OFICIAL:
-            solicitante = st.selectbox("Colaborador Solicitante", EQUIPE)
-        else:
-            solicitante = perfil_usuario
-            st.write(f"✍️ Solicitante: **{solicitante}**")
+        solicitante = perfil_usuario
+        st.write(f"✍️ Solicitante: **{solicitante}**")
 
         tipo = st.radio("Modalidade", ["Férias", "Banco de Horas / Abono", "Folga de Aniversário"], horizontal=True)
+        modo_tempo = st.radio("Duração da Ausência", ["Dias Inteiros", "Horário Específico (Parcial)"], horizontal=True)
         
-        c1, c2 = st.columns(2)
-        with c1:
-            dt_inicio = st.date_input("Data de Início", datetime.date.today())
-        with c2:
-            if tipo == "Férias":
-                qnt_dias = st.number_input("Quantidade de Dias", 1, 30, 10)
-                dt_fim = dt_inicio + datetime.timedelta(days=int(qnt_dias) - 1)
-            else:
-                dt_fim = st.date_input("Data de Término", dt_inicio)
-                qnt_dias = (dt_fim - dt_inicio).days + 1
+        if modo_tempo == "Dias Inteiros":
+            c1, c2 = st.columns(2)
+            with c1:
+                dt_inicio = st.date_input("Data de Início", datetime.date.today())
+            with c2:
+                if tipo == "Férias":
+                    qnt_dias = st.number_input("Quantidade de Dias", min_value=1, max_value=30, value=10, step=1)
+                    dt_fim = dt_inicio + datetime.timedelta(days=int(qnt_dias) - 1)
+                else:
+                    dt_fim = st.date_input("Data de Término", dt_inicio)
+                    qnt_dias = max(1, (dt_fim - dt_inicio).days + 1)
 
-        retorno = dt_fim + datetime.timedelta(days=1)
-        st.markdown(f"💡 **Previsão de Retorno:** {retorno.strftime('%d/%m/%Y')} ({qnt_dias} dias ausente)")
+            retorno = dt_fim + datetime.timedelta(days=1)
+            detalhe_str = f"{int(qnt_dias)} dias"
+            st.markdown(f"💡 **Previsão de Retorno:** {retorno.strftime('%d/%m/%Y')} ({int(qnt_dias)} dias ausente)")
+        else:
+            dt_inicio = st.date_input("Data da Ausência", datetime.date.today())
+            dt_fim = dt_inicio
+            
+            c_h1, c_h2 = st.columns(2)
+            with c_h1:
+                hora_inicio = st.time_input("Horário de Início", datetime.time(9, 0))
+            with c_h2:
+                hora_fim = st.time_input("Horário de Retorno", datetime.time(12, 0))
+            
+            detalhe_str = f"Das {hora_inicio.strftime('%H:%M')} às {hora_fim.strftime('%H:%M')}"
+            st.markdown(f"💡 **Resumo do Horário:** Ausente no dia {dt_inicio.strftime('%d/%m/%Y')} ({detalhe_str})")
+
+        justificativa = st.text_area("Justificativa / Motivo", placeholder="Ex: Consulta médica, compromisso pessoal...")
         
-        justificativa = st.text_area("Justificativa / Motivo", placeholder="Ex: Descanso anual, compensação de horas extras...")
-        
-        # Validações em tempo real
         erros, avisos = checar_regras(solicitante, dt_inicio, dt_fim)
         bloqueio = False
         
@@ -206,37 +253,41 @@ with aba_solicitar:
             for a in avisos:
                 st.warning(f"⚠️ {a}")
                 
-        enviar = st.form_submit_button("🚀 Enviar para Aprovação do Gestor", use_container_width=True)
+        enviar = st.form_submit_button("🚀 Enviar Solicitação para Aprovação", use_container_width=True)
         
         if enviar:
             if bloqueio:
-                st.error("Envio bloqueado por regras de política da empresa.")
+                st.error("Envio bloqueado por regras de feriados ou fins de semana.")
             elif not justificativa.strip():
-                st.error("A justificativa é obrigatória para o controle do gestor.")
+                st.error("A justificativa é obrigatória.")
             else:
                 novo_pedido = {
                     "id": len(st.session_state["agendamentos"]) + 1,
                     "colaborador": solicitante,
                     "tipo": tipo,
+                    "modo": modo_tempo,
                     "inicio": dt_inicio,
                     "fim": dt_fim,
-                    "dias": qnt_dias,
+                    "detalhe_tempo": detalhe_str,
                     "justificativa": justificativa,
                     "status": "Pendente"
                 }
                 st.session_state["agendamentos"].append(novo_pedido)
                 st.balloons()
-                st.success(f"Solicitação enviada com sucesso! Um aviso foi disparado para {GESTOR_OFICIAL.split()[0]}.")
+                st.success("Solicitação enviada com sucesso! O gestor foi notificado.")
 
 # ---------------------------------------------------------
-# ABA 3: PAINEL DO GESTOR (Exclusivo para Danilo)
+# ABA 3: PAINEL DO GESTOR COM SENHA
 # ---------------------------------------------------------
 with aba_gestor:
-    if perfil_usuario != GESTOR_OFICIAL:
-        st.warning(f"🔒 **Área Restrita:** Este painel de aprovação é exclusivo para o gestor ({GESTOR_OFICIAL}). Alterne sua sessão na barra lateral para testar como gestor.")
-    else:
-        st.subheader(f"Painel Gerencial de {GESTOR_OFICIAL}")
-        st.caption("Aprove ou rejeite solicitações pendentes da equipe com um clique.")
+    st.subheader("Área Restrita do Gestor")
+    st.caption("Insira a senha de acesso para gerenciar as aprovações da equipe.")
+    
+    senha_digitada = st.text_input("Senha de Acesso do Gestor", type="password", placeholder="Digite a senha...")
+    
+    if senha_digitada == SENHA_GESTOR:
+        st.success("✅ Acesso autorizado!")
+        st.markdown(f"### Painel Gerencial de {GESTOR_OFICIAL}")
         
         sub_pendentes, sub_historico = st.tabs(["⏳ Pendentes de Aprovação", "📋 Histórico Completo"])
         
@@ -246,15 +297,20 @@ with aba_gestor:
             if pendentes:
                 for p in pendentes:
                     with st.container(border=True):
-                        st.markdown(f"**{p['colaborador']}** — 📌 *{p['tipo']}* ({p['dias']} dias)")
-                        st.caption(f"📅 Período: De {p['inicio'].strftime('%d/%m/%Y')} até {p['fim'].strftime('%d/%m/%Y')}")
+                        if p.get("modo") == "Horas Parciais":
+                            info_p = f"⏰ Horário Parcial: {p['detalhe_tempo']} em {p['inicio'].strftime('%d/%m/%Y')}"
+                        else:
+                            info_p = f"📅 Período: De {p['inicio'].strftime('%d/%m/%Y')} até {p['fim'].strftime('%d/%m/%Y')} ({p['detalhe_tempo']})"
+
+                        st.markdown(f"**{p['colaborador']}** — 📌 *{p['tipo']}*")
+                        st.caption(info_p)
                         st.text(f"Justificativa: {p['justificativa']}")
                         
                         b1, b2 = st.columns(2)
                         with b1:
                             if st.button(f"✅ Aprovar #{p['id']}", key=f"ok_{p['id']}", use_container_width=True):
                                 p["status"] = "Aprovado"
-                                st.success(f"Solicitação de {p['colaborador'].split()[0]} aprovada! O calendário foi atualizado.")
+                                st.success(f"Solicitação de {p['colaborador'].split()[0]} aprovada!")
                                 st.rerun()
                         with b2:
                             if st.button(f"❌ Rejeitar #{p['id']}", key=f"no_{p['id']}", use_container_width=True):
@@ -262,7 +318,7 @@ with aba_gestor:
                                 st.warning("Solicitação rejeitada.")
                                 st.rerun()
             else:
-                st.success("🎉 Nenhuma solicitação pendente no momento. Tudo em dia com a equipe!")
+                st.success("🎉 Nenhuma solicitação pendente no momento. Tudo em dia!")
                 
         with sub_historico:
             st.markdown("### Registro Geral de Solicitações")
@@ -271,3 +327,8 @@ with aba_gestor:
                 st.dataframe(df_hist, use_container_width=True)
             else:
                 st.info("Nenhum registro encontrado.")
+                
+    elif senha_digitada != "":
+        st.error("❌ Senha incorreta. Apenas o gestor autorizado possui a senha de acesso.")
+    else:
+        st.info("🔒 Por favor, digite a senha para visualizar o painel gerencial.")
