@@ -1,38 +1,65 @@
 import streamlit as st
 import pandas as pd
 import datetime
+import holidays
 
 # ---------------------------------------------------------
-# 1. CONFIGURAÇÃO E DESIGN PROFISSIONAL (CSS)
+# 1. CONFIGURAÇÃO DE TELA E DESIGN PROFISSIONAL
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="Portal de Ausências & Férias",
+    page_title="Portal de Férias & Ausências",
     page_icon="🌴",
-    layout="wide",
-    initial_sidebar_state="collapsed"
+    layout="wide"
 )
 
+# Estilização CSS Avançada (Modo Limpo / Clean UI)
 st.markdown("""
     <style>
     .stApp { background-color: #F8FAFC; }
-    .card-box {
+    
+    /* Cartões Modernos */
+    .metric-card {
         background-color: #FFFFFF;
-        padding: 24px;
+        padding: 20px;
         border-radius: 12px;
         border: 1px solid #E2E8F0;
-        box-shadow: 0px 4px 6px -1px rgba(0, 0, 0, 0.05);
-        margin-bottom: 16px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        text-align: center;
     }
-    .badge-alerta {
+    
+    .event-card {
+        background-color: #FFFFFF;
+        padding: 16px;
+        border-radius: 10px;
+        border: 1px solid #E2E8F0;
+        border-left: 4px solid #2563EB;
+        margin-bottom: 12px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
+    
+    .badge-status {
+        float: right;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 600;
+    }
+    .status-aprovado { background-color: #DCFCE7; color: #166534; }
+    .status-pendente { background-color: #FEF9C3; color: #854D0E; }
+    
+    /* Alertas Personalizados */
+    .alert-box {
         background-color: #FEF2F2;
         color: #991B1B;
-        padding: 12px;
+        padding: 14px;
         border-radius: 8px;
         border-left: 4px solid #EF4444;
-        font-weight: 500;
         margin-top: 10px;
         margin-bottom: 10px;
+        font-size: 14px;
     }
+    
+    /* Botões */
     .stButton>button {
         background-color: #2563EB;
         color: white;
@@ -47,18 +74,18 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 2. EQUIPE E BANCO DE DADOS INICIAL
+# 2. DADOS DA EQUIPE E LOCAIS (Feriados)
 # ---------------------------------------------------------
 GESTOR = "DANILO DA SILVA VILAS BOAS"
-EQUIPE = [
-    "ERIKA LIMA DE OLIVEIRA",
-    "JOYCE ADRIELLE DIAS DA SILVA",
-    "KELVYN AMARAL CANDIDO",
-    "GABRIELA HELEN SANTOS XAVIER"
-]
-TODOS_USUARIOS = [GESTOR] + EQUIPE
+EQUIPE_DETALHES = {
+    "ERIKA LIMA DE OLIVEIRA": {"cidade": "São Paulo", "estado": "SP"},
+    "JOYCE ADRIELLE DIAS DA SILVA": {"cidade": "Salvador", "estado": "BA"},
+    "KELVYN AMARAL CANDIDO": {"cidade": "Belo Horizonte", "estado": "MG"},
+    "GABRIELA HELEN SANTOS XAVIER": {"cidade": "Salvador", "estado": "BA"}
+}
+EQUIPE = list(EQUIPE_DETALHES.keys())
 
-# Simulador de banco de dados na sessão (em breve ligado ao Excel/Google Sheets)
+# Banco de dados simulado na sessão
 if "agendamentos" not in st.session_state:
     st.session_state["agendamentos"] = [
         {
@@ -68,157 +95,161 @@ if "agendamentos" not in st.session_state:
             "inicio": datetime.date(2026, 11, 10),
             "fim": datetime.date(2026, 11, 20),
             "status": "Aprovado"
-        },
-        {
-            "id": 2,
-            "colaborador": "KELVYN AMARAL CANDIDO",
-            "tipo": "Banco de Horas / Abono",
-            "inicio": datetime.date(2026, 11, 15),
-            "fim": datetime.date(2026, 11, 15),
-            "status": "Aprovado"
         }
     ]
 
 # ---------------------------------------------------------
-# 3. FUNÇÃO DE CONFLITO DE DATAS
+# 3. VALIDAÇÕES DE REGRAS (Feriados e Conflitos)
 # ---------------------------------------------------------
-def checar_conflitos(nome_solicitante, dt_inicio, dt_fim):
-    conflitos = []
+def checar_regras(nome_colaborador, dt_inicio, dt_fim):
+    detalhes = EQUIPE_DETALHES[nome_colaborador]
+    feriados_br = holidays.BR(years=2026, subdiv=detalhes["estado"])
+    
+    erros = []
+    avisos = []
+    
+    if dt_inicio in feriados_br:
+        erros.append(f"Feriado detectado em {dt_inicio.strftime('%d/%m/%Y')} ({feriados_br.get(dt_inicio)}). Início de férias não permitido.")
+    if dt_inicio.weekday() >= 5:
+        erros.append("O início das férias não pode cair em finais de semana (Sábado ou Domingo).")
+        
     for reg in st.session_state["agendamentos"]:
-        if reg["colaborador"] != nome_solicitante and reg["status"] in ["Aprovado", "Pendente de Aprovação"]:
+        if reg["colaborador"] != nome_colaborador and reg["status"] in ["Aprovado", "Pendente"]:
             if dt_inicio <= reg["fim"] and dt_fim >= reg["inicio"]:
-                conflitos.append(reg)
-    return conflitos
+                avisos.append(f"Conflito de agenda: {reg['colaborador']} estará ausente de {reg['inicio'].strftime('%d/%m/%Y')} a {reg['fim'].strftime('%d/%m/%Y')}.")
+                
+    return erros, avisos
 
 # ---------------------------------------------------------
-# 4. INTERFACE DO APLICATIVO
+# 4. INTERFACE VISUAL LIMPA (UI / UX)
 # ---------------------------------------------------------
-st.title("🌴 Portal de Férias & Ausências — Retenção Nacional")
-st.caption("Substituindo o controle manual por um fluxo inteligente, integrado e sem conflitos.")
-
+st.title("🌴 Portal de Retenção Nacional — Férias & Ausências")
+st.markdown("Gerenciamento inteligente de equipe, sem tabelas pesadas e com validação automática de regras.")
 st.markdown("---")
 
-# Abas de navegação (Aba do Gestor liberada se for o Danilo)
-aba1, aba2, aba3 = st.tabs(["📅 Painel da Equipe", "➕ Nova Solicitação", "⚙️ Área do Gestor (Danilo)"])
+# Abas Limpas
+aba_painel, aba_solicitar, aba_gestor = st.tabs(["📊 Visão Geral da Equipe", "➕ Nova Solicitação", f"⚙️ Gestão ({GESTOR.split()[0]})"])
 
 # ---------------------------------------------------------
-# ABA 1: PAINEL DA EQUIPE
+# ABA 1: VISÃO GERAL (Substituindo a tabela feia por Cards)
 # ---------------------------------------------------------
-with aba1:
-    st.subheader("Panorama de Ausências e Férias")
+with aba_painel:
+    st.subheader("Painel de Ausências Ativas")
     
-    col1, col2, col3 = st.columns(3)
-    total_ferias = sum(1 for r in st.session_state["agendamentos"] if r["tipo"] == "Férias" and r["status"] == "Aprovado")
-    total_banco = sum(1 for r in st.session_state["agendamentos"] if r["tipo"] != "Férias" and r["status"] == "Aprovado")
+    # Métricas de topo limpas
+    c1, c2, c3 = st.columns(3)
+    total_aprovados = sum(1 for r in st.session_state["agendamentos"] if r["status"] == "Aprovado")
+    total_pendentes = sum(1 for r in st.session_state["agendamentos"] if r["status"] == "Pendente")
     
-    col1.metric("Férias Ativas / Aprovadas", f"{total_ferias}")
-    col2.metric("Banco de Horas Aprovados", f"{total_banco}")
-    col3.metric("Total da Equipe", f"{len(EQUIPE)} membros")
+    c1.metric("Ausências Aprovadas", total_aprovados)
+    c2.metric("Solicitações Pendentes", total_pendentes)
+    c3.metric("Membros na Equipe", len(EQUIPE))
     
     st.markdown("<br>", unsafe_allow_html=True)
     
     if st.session_state["agendamentos"]:
-        df_display = []
         for reg in st.session_state["agendamentos"]:
-            dias_totais = (reg["fim"] - reg["inicio"]).days + 1
-            df_display.append({
-                "Colaborador": reg["colaborador"],
-                "Tipo": reg["tipo"],
-                "Início": reg["inicio"].strftime("%d/%m/%Y"),
-                "Término": reg["fim"].strftime("%d/%m/%Y"),
-                "Duração": f"{dias_totais} dia(s)",
-                "Status": reg["status"]
-            })
-        st.dataframe(pd.DataFrame(df_display), use_container_width=True)
+            dias = (reg["fim"] - reg["inicio"]).days + 1
+            status_class = "status-aprovado" if reg["status"] == "Aprovado" else "status-pendente"
+            
+            # Renderização de card elegante em vez de tabela crua
+            st.markdown(f"""
+                <div class="event-card">
+                    <span class="badge-status {status_class}">{reg['status']}</span>
+                    <h4 style="margin: 0; color: #1E293B;">{reg['colaborador']}</h4>
+                    <p style="margin: 4px 0 0 0; color: #64748B; font-size: 14px;">
+                        📌 <b>{reg['tipo']}</b> | 📅 De <b>{reg['inicio'].strftime('%d/%m/%Y')}</b> até <b>{reg['fim'].strftime('%d/%m/%Y')}</b> ({dias} dias)
+                    </p>
+                </div>
+            """, unsafe_allow_html=True)
     else:
         st.info("Nenhuma ausência registrada no momento.")
 
 # ---------------------------------------------------------
-# ABA 2: NOVA SOLICITAÇÃO
+# ABA 2: NOVA SOLICITAÇÃO (Fluida e Intuitiva)
 # ---------------------------------------------------------
-with aba2:
-    st.subheader("Solicitar Férias ou Banco de Horas")
+with aba_solicitar:
+    st.subheader("Nova Solicitação de Ausência")
     
     with st.container():
-        st.markdown('<div class="card-box">', unsafe_allow_html=True)
-        
-        solicitante = st.selectbox("Selecione seu Nome", EQUIPE)
-        tipo_solicitacao = st.radio("Tipo de Solicitação", ["Férias", "Banco de Horas / Abono"], horizontal=True)
-        
-        col_dt1, col_dt2 = st.columns(2)
-        with col_dt1:
+        col_s1, col_s2 = st.columns(2)
+        with col_s1:
+            solicitante = st.selectbox("Selecione seu Nome", EQUIPE)
+        with col_s2:
+            tipo = st.radio("Modalidade", ["Férias", "Banco de Horas / Abono"], horizontal=True)
+            
+        c_d1, c_d2 = st.columns(2)
+        with c_d1:
             dt_inicio = st.date_input("Data de Início", datetime.date.today())
-        
-        if tipo_solicitacao == "Férias":
-            with col_dt2:
-                qnt_dias = st.number_input("Quantidade de Dias", min_value=1, max_value=30, value=10)
-            dt_fim = dt_inicio + datetime.timedelta(days=int(qnt_dias) - 1)
-        else:
-            with col_dt2:
+        with c_d2:
+            if tipo == "Férias":
+                qnt = st.number_input("Quantidade de Dias", 1, 30, 10)
+                dt_fim = dt_inicio + datetime.timedelta(days=int(qnt) - 1)
+            else:
                 dt_fim = st.date_input("Data de Término", dt_inicio)
-            qnt_dias = (dt_fim - dt_inicio).days + 1
+                qnt = (dt_fim - dt_inicio).days + 1
 
-        dt_retorno = dt_fim + datetime.timedelta(days=1)
+        retorno = dt_fim + datetime.timedelta(days=1)
+        st.markdown(f"💡 **Retorno ao trabalho:** {retorno.strftime('%d/%m/%Y')} ({qnt} dias contabilizados)")
         
-        st.markdown("---")
-        st.write(f"📊 **Resumo:** {qnt_dias} dia(s). Retorno previsto ao trabalho em: **{dt_retorno.strftime('%d/%m/%Y')}**")
+        # Validações em tempo real
+        erros, avisos = checar_regras(solicitante, dt_inicio, dt_fim)
         
-        # VALIDAÇÃO DE CONFLITO EM TEMPO REAL
-        conflitos = checar_conflitos(solicitante, dt_inicio, dt_fim)
-        
-        if conflitos:
-            st.markdown('<div class="badge-alerta">', unsafe_allow_html=True)
-            st.warning("⚠️ **ALERTA DE CHOQUE DE DATAS NA EQUIPE:**")
-            for c in conflitos:
-                st.write(f"• **{c['colaborador']}** já estará ausente ({c['tipo']}) entre {c['inicio'].strftime('%d/%m/%Y')} e {c['fim'].strftime('%d/%m/%Y')}.")
-            st.markdown('</div>', unsafe_allow_html=True)
-        else:
-            st.success("✅ **Agenda Livre:** Nenhum outro membro da equipe está ausente nesta mesma janela.")
+        bloqueio = False
+        if erros:
+            bloqueio = True
+            for e in erros:
+                st.markdown(f'<div class="alert-box">❌ <b>Restrição de Política:</b> {e}</div>', unsafe_allow_html=True)
+                
+        if avisos:
+            for a in avisos:
+                st.warning(f"⚠️ {a}")
+                
+        if not erros and not avisos:
+            st.success("✅ Período livre de conflitos e de acordo com as regras de feriados.")
             
         st.markdown("<br>", unsafe_allow_html=True)
         
-        if st.button("🚀 Enviar Solicitação para o Gestor (Danilo)"):
-            novo_registro = {
+        if st.button("🚀 Enviar Solicitação para o Gestor", disabled=bloqueio):
+            novo = {
                 "id": len(st.session_state["agendamentos"]) + 1,
                 "colaborador": solicitante,
-                "tipo": tipo_solicitacao,
+                "tipo": tipo,
                 "inicio": dt_inicio,
                 "fim": dt_fim,
-                "status": "Pendente de Aprovação"
+                "status": "Pendente"
             }
-            st.session_state["agendamentos"].append(novo_registro)
+            st.session_state["agendamentos"].append(novo)
             st.balloons()
-            st.success("Solicitação enviada com sucesso! O gestor foi notificado.")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+            st.success("Solicitação enviada com sucesso! O gestor foi avisado.")
 
 # ---------------------------------------------------------
 # ABA 3: ÁREA DO GESTOR (DANILO)
 # ---------------------------------------------------------
-with aba3:
-    st.subheader(f"Painel de Aprovação do Gestor ({GESTOR})")
-    st.info("Aqui o Danilo gerencia e aprova as solicitações pendentes da equipe.")
+with aba_gestor:
+    st.subheader(f"Painel de Aprovações de {GESTOR.split()[0]}")
     
-    pendentes = [r for r in st.session_state["agendamentos"] if r["status"] == "Pendente de Aprovação"]
+    pendentes = [r for r in st.session_state["agendamentos"] if r["status"] == "Pendente"]
     
     if pendentes:
         for p in pendentes:
-            with st.container():
-                st.markdown('<div class="card-box">', unsafe_allow_html=True)
-                st.write(f"👤 **Colaborador:** {p['colaborador']}")
-                st.write(f"📌 **Tipo:** {p['tipo']} | **Período:** {p['inicio'].strftime('%d/%m/%Y')} até {p['fim'].strftime('%d/%m/%Y')}")
-                
-                col_btn1, col_btn2 = st.columns(2)
-                with col_btn1:
-                    if st.button(f"✅ Aprovar ID {p['id']}", key=f"aprov_{p['id']}"):
-                        p["status"] = "Aprovado"
-                        st.success(f"Solicitação de {p['colaborador']} aprovada!")
-                        st.rerun()
-                with col_btn2:
-                    if st.button(f"❌ Rejeitar ID {p['id']}", key=f"rejeit_{p['id']}"):
-                        p["status"] = "Rejeitado"
-                        st.warning(f"Solicitação rejeitada.")
-                        st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown(f"""
+                <div class="event-card" style="border-left-color: #EAB308;">
+                    <h4 style="margin: 0; color: #1E293B;">{p['colaborador']}</h4>
+                    <p style="margin: 4px 0 8px 0; color: #64748B; font-size: 14px;">
+                        📌 <b>{p['tipo']}</b> | 📅 {p['inicio'].strftime('%d/%m/%Y')} até {p['fim'].strftime('%d/%m/%Y')}
+                    </p>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            b1, b2 = st.columns(2)
+            with b1:
+                if st.button(f"✅ Aprovar", key=f"ok_{p['id']}"):
+                    p["status"] = "Aprovado"
+                    st.rerun()
+            with b2:
+                if st.button(f"❌ Rejeitar", key=f"no_{p['id']}"):
+                    p["status"] = "Rejeitado"
+                    st.rerun()
     else:
-        st.success("🎉 Não há solicitações pendentes de aprovação no momento.")
+        st.success("🎉 Nenhuma solicitação pendente para análise.")
