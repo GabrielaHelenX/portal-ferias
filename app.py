@@ -12,7 +12,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilização Clean & Modern UI (Padrão Ânima com destaque para feriados)
+# Estilização Clean & Modern UI (Padrão Ânima)
 st.markdown("""
     <style>
     .stApp { background-color: #0F172A; color: #F8FAFC; }
@@ -55,7 +55,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 2. DADOS DA EQUIPE E LOCALIDADES CORRIGIDAS
+# 2. DADOS DA EQUIPE E LOCALIDADES
 # ---------------------------------------------------------
 GESTOR_OFICIAL = "DANILO DA SILVA VILAS BOAS"
 SENHA_GESTOR = "anima2026"
@@ -69,6 +69,7 @@ EQUIPE_DETALHES = {
 }
 EQUIPE = list(EQUIPE_DETALHES.keys())
 
+# Inicialização com tratamento de segurança para evitar qualquer KeyError
 if "agendamentos" not in st.session_state:
     st.session_state["agendamentos"] = [
         {
@@ -76,10 +77,21 @@ if "agendamentos" not in st.session_state:
             "colaborador": "JOYCE ADRIELLE DIAS DA SILVA",
             "tipo": "Férias",
             "modo": "Dias Inteiros",
-            "inicio": datetime.date(2026, 11, 10),
-            "fim": datetime.date(2026, 11, 20),
-            "detalhe_tempo": "11 dias",
-            "justificativa": "Descanso anual programado",
+            "inicio": datetime.date(2024, 12, 10),
+            "fim": datetime.date(2025, 12, 9),
+            "detalhe_tempo": "20 dias",
+            "justificativa": "Férias anuais programadas",
+            "status": "Aprovado"
+        },
+        {
+            "id": 2,
+            "colaborador": "KELVYN AMARAL CANDIDO",
+            "tipo": "Férias",
+            "modo": "Dias Inteiros",
+            "inicio": datetime.date(2026, 11, 13),
+            "fim": datetime.date(2026, 11, 27),
+            "detalhe_tempo": "15 dias",
+            "justificativa": "Férias programadas de novembro",
             "status": "Aprovado"
         }
     ]
@@ -150,7 +162,6 @@ with aba_painel:
     
     st.write("")
     
-    # Exibe os feriados oficiais da base do usuário logado
     with st.expander(f"📅 Ver Feriados Nacionais e Estaduais para {local_atual} (Ano 2026)", expanded=False):
         feriados_usuario = holidays.BR(years=2026, subdiv=EQUIPE_DETALHES[perfil_usuario]["estado"])
         feriados_futuros = {d: n for d, n in sorted(feriados_usuario.items()) if d >= datetime.date.today()}
@@ -170,11 +181,13 @@ with aba_painel:
     if agendamentos_ativos:
         for reg in agendamentos_ativos:
             inic = EQUIPE_DETALHES.get(reg['colaborador'], {}).get('inic', 'COL')
+            modo_reg = reg.get("modo", "Dias Inteiros")
+            detalhe_reg = reg.get("detalhe_tempo", f"{(reg['fim'] - reg['inicio']).days + 1} dias")
             
-            if reg.get("modo") == "Horas Parciais":
-                info_tempo = f"⏰ Horário: {reg['detalhe_tempo']} em {reg['inicio'].strftime('%d/%m/%Y')}"
+            if modo_reg == "Horas Parciais":
+                info_tempo = f"⏰ Horário: {detalhe_reg} em {reg['inicio'].strftime('%d/%m/%Y')}"
             else:
-                info_tempo = f"📅 De {reg['inicio'].strftime('%d/%m/%Y')} até {reg['fim'].strftime('%d/%m/%Y')} ({reg['detalhe_tempo']})"
+                info_tempo = f"📅 De {reg['inicio'].strftime('%d/%m/%Y')} até {reg['fim'].strftime('%d/%m/%Y')} ({detalhe_reg})"
 
             st.markdown(f"""
                 <div class="anima-card">
@@ -186,7 +199,7 @@ with aba_painel:
                                 📌 <b>{reg['tipo']}</b> | {info_tempo}
                             </p>
                             <p style="margin: 4px 0 0 0; color: #C084FC; font-size: 12px; font-style: italic;">
-                                💬 Justificativa: "{reg['justificativa']}"
+                                💬 Justificativa: "{reg.get('justificativa', 'Sem justificativa')}"
                             </p>
                         </div>
                         <div>
@@ -296,15 +309,18 @@ with aba_gestor:
             
             if pendentes:
                 for p in pendentes:
+                    p_modo = p.get("modo", "Dias Inteiros")
+                    p_detalhe = p.get("detalhe_tempo", "")
+                    
                     with st.container(border=True):
-                        if p.get("modo") == "Horas Parciais":
-                            info_p = f"⏰ Horário Parcial: {p['detalhe_tempo']} em {p['inicio'].strftime('%d/%m/%Y')}"
+                        if p_modo == "Horas Parciais":
+                            info_p = f"⏰ Horário Parcial: {p_detalhe} em {p['inicio'].strftime('%d/%m/%Y')}"
                         else:
-                            info_p = f"📅 Período: De {p['inicio'].strftime('%d/%m/%Y')} até {p['fim'].strftime('%d/%m/%Y')} ({p['detalhe_tempo']})"
+                            info_p = f"📅 Período: De {p['inicio'].strftime('%d/%m/%Y')} até {p['fim'].strftime('%d/%m/%Y')} ({p_detalhe})"
 
                         st.markdown(f"**{p['colaborador']}** — 📌 *{p['tipo']}*")
                         st.caption(info_p)
-                        st.text(f"Justificativa: {p['justificativa']}")
+                        st.text(f"Justificativa: {p.get('justificativa', 'Sem justificativa')}")
                         
                         b1, b2 = st.columns(2)
                         with b1:
