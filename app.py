@@ -71,11 +71,10 @@ EQUIPE_DETALHES = {
 }
 EQUIPE = list(EQUIPE_DETALHES.keys())
 
-# Apenas o agendamento do Kelvyn mantido inicialmente
 if "agendamentos" not in st.session_state:
     st.session_state["agendamentos"] = [
         {
-            "id": 1,
+            "id": 2,
             "colaborador": "KELVYN AMARAL CANDIDO",
             "tipo": "Férias",
             "modo": "Dias Inteiros",
@@ -176,7 +175,7 @@ with aba_painel:
             detalhe_reg = reg.get("detalhe_tempo", f"{(reg['fim'] - reg['inicio']).days + 1} dias")
             
             if modo_reg == "Horas Parciais":
-                info_tempo = f"⏰ Horário: {detalhe_reg} em {reg['inicio'].strftime('%d/%m/%Y')}"
+                info_tempo = f"⏰ Horário Parcial: {detalhe_reg} em {reg['inicio'].strftime('%d/%m/%Y')}"
             else:
                 info_tempo = f"📅 De {reg['inicio'].strftime('%d/%m/%Y')} até {reg['fim'].strftime('%d/%m/%Y')} ({detalhe_reg})"
 
@@ -203,94 +202,98 @@ with aba_painel:
         st.info("Nenhuma ausência confirmada no momento.")
 
 # ---------------------------------------------------------
-# ABA 2: NOVA SOLICITAÇÃO
+# ABA 2: NOVA SOLICITAÇÃO (Com seletor de horas garantido)
 # ---------------------------------------------------------
 with aba_solicitar:
     st.subheader("Registrar Nova Solicitação de Ausência")
     st.caption(f"Base operacional do solicitante: **{local_atual}** (Validação de feriados estaduais ativa).")
     
-    with st.form("form_solicitacao_limpo"):
-        solicitante = perfil_usuario
-        st.write(f"✍️ Solicitante: **{solicitante}**")
+    solicitante = perfil_usuario
+    st.write(f"✍️ Solicitante: **{solicitante}**")
 
-        tipo = st.radio("Modalidade", ["Férias", "Banco de Horas / Abono"], horizontal=True)
-        modo_tempo = st.radio("Duração da Ausência", ["Dias Inteiros (Início e Fim)", "Horário Específico (Parcial)"], horizontal=True)
+    tipo = st.radio("Modalidade", ["Férias", "Banco de Horas / Abono"], horizontal=True)
+    modo_tempo = st.radio("Duração da Ausência", ["Dias Inteiros (Início e Fim)", "Horário Específico (Parcial)"], horizontal=True)
+    
+    dt_inicio = datetime.date.today()
+    dt_fim = datetime.date.today()
+    detalhe_str = ""
+    
+    if modo_tempo == "Dias Inteiros (Início e Fim)":
+        c1, c2 = st.columns(2)
+        with c1:
+            dt_inicio = st.date_input("Data de Início", datetime.date.today())
+        with c2:
+            dt_fim = st.date_input("Data de Término", datetime.date.today() + datetime.timedelta(days=5))
         
-        dt_inicio = datetime.date.today()
-        dt_fim = datetime.date.today()
-        detalhe_str = ""
-        
-        if modo_tempo == "Dias Inteiros (Início e Fim)":
-            c1, c2 = st.columns(2)
-            with c1:
-                dt_inicio = st.date_input("Data de Início", datetime.date.today())
-            with c2:
-                dt_fim = st.date_input("Data de Término", datetime.date.today() + datetime.timedelta(days=5))
-            
-            if dt_fim >= dt_inicio:
-                qnt_dias = (dt_fim - dt_inicio).days + 1
-            else:
-                qnt_dias = 0
-                
-            retorno = dt_fim + datetime.timedelta(days=1)
-            detalhe_str = f"{qnt_dias} dias"
-            
-            if qnt_dias > 0:
-                st.markdown(f"💡 **Resumo Dinâmico:** De **{dt_inicio.strftime('%d/%m/%Y')}** até **{dt_fim.strftime('%d/%m/%Y')}** (**{qnt_dias} dias** no total). Retorno em: {retorno.strftime('%d/%m/%Y')}")
-            else:
-                st.error("❌ A data de término deve ser igual ou posterior à data de início.")
+        if dt_fim >= dt_inicio:
+            qnt_dias = (dt_fim - dt_inicio).days + 1
         else:
-            dt_inicio = st.date_input("Data da Ausência", datetime.date.today())
-            dt_fim = dt_inicio
+            qnt_dias = 0
             
-            c_h1, c_h2 = st.columns(2)
-            with c_h1:
-                hora_inicio = st.time_input("Horário de Início da Ausência", datetime.time(9, 0))
-            with c_h2:
-                hora_fim = st.time_input("Horário de Retorno", datetime.time(12, 0))
+        retorno = dt_fim + datetime.timedelta(days=1)
+        detalhe_str = f"{qnt_dias} dias"
+        
+        if qnt_dias > 0:
+            st.markdown(f"💡 **Resumo Dinâmico:** De **{dt_inicio.strftime('%d/%m/%Y')}** até **{dt_fim.strftime('%d/%m/%Y')}** (**{qnt_dias} dias** no total). Retorno em: {retorno.strftime('%d/%m/%Y')}")
+        else:
+            st.error("❌ A data de término deve ser igual ou posterior à data de início.")
+    else:
+        # AQUI GARANTIMOS O RELÓGINHO DE HORAS PARCIAIS
+        st.markdown("---")
+        st.markdown("🕒 **Defina o período da ausência parcial neste dia:**")
+        
+        dt_inicio = st.date_input("Data da Ausência Parcial", datetime.date.today())
+        dt_fim = dt_inicio
+        
+        c_h1, c_h2 = st.columns(2)
+        with c_h1:
+            hora_inicio = st.time_input("Horário de Saída / Início", datetime.time(9, 0))
+        with c_h2:
+            hora_fim = st.time_input("Horário de Retorno / Término", datetime.time(12, 0))
+        
+        detalhe_str = f"Das {hora_inicio.strftime('%H:%M')} às {hora_fim.strftime('%H:%M')}"
+        st.markdown(f"💡 **Resumo do Horário:** Ausente no dia **{dt_inicio.strftime('%d/%m/%Y')}** ({detalhe_str})")
+        st.markdown("---")
+
+    justificativa = st.text_area("Justificativa / Motivo", placeholder="Ex: Consulta médica, compromisso pessoal, descanso...")
+    
+    erros, avisos = checar_regras(solicitante, dt_inicio, dt_fim)
+    bloqueio = False
+    
+    if modo_tempo == "Dias Inteiros (Início e Fim)" and dt_fim < dt_inicio:
+        bloqueio = True
+        erros.append("A data de término não pode ser anterior à data de início.")
+
+    if erros:
+        bloqueio = True
+        for e in erros:
+            st.error(f"❌ {e}")
+    if avisos:
+        for a in avisos:
+            st.warning(f"⚠️ {a}")
             
-            detalhe_str = f"Das {hora_inicio.strftime('%H:%M')} às {hora_fim.strftime('%H:%M')}"
-            st.markdown(f"💡 **Resumo do Horário Parcial:** Ausente no dia {dt_inicio.strftime('%d/%m/%Y')} ({detalhe_str})")
-
-        justificativa = st.text_area("Justificativa / Motivo", placeholder="Ex: Consulta médica, compromisso pessoal, descanso...")
-        
-        erros, avisos = checar_regras(solicitante, dt_inicio, dt_fim)
-        bloqueio = False
-        
-        if modo_tempo == "Dias Inteiros (Início e Fim)" and dt_fim < dt_inicio:
-            bloqueio = True
-            erros.append("A data de término não pode ser anterior à data de início.")
-
-        if erros:
-            bloqueio = True
-            for e in erros:
-                st.error(f"❌ {e}")
-        if avisos:
-            for a in avisos:
-                st.warning(f"⚠️ {a}")
-                
-        enviar = st.form_submit_button("🚀 Enviar Solicitação para Aprovação", use_container_width=True)
-        
-        if enviar:
-            if bloqueio:
-                st.error("Envio bloqueado devido a inconsistências nas datas.")
-            elif not justificativa.strip():
-                st.error("A justificativa é obrigatória.")
-            else:
-                novo_pedido = {
-                    "id": len(st.session_state["agendamentos"]) + 1,
-                    "colaborador": solicitante,
-                    "tipo": tipo,
-                    "modo": "Horas Parciais" if "Parcial" in modo_tempo else "Dias Inteiros",
-                    "inicio": dt_inicio,
-                    "fim": dt_fim,
-                    "detalhe_tempo": detalhe_str,
-                    "justificativa": justificativa,
-                    "status": "Pendente"
-                }
-                st.session_state["agendamentos"].append(novo_pedido)
-                st.balloons()
-                st.success("Solicitação enviada com sucesso! O gestor foi notificado.")
+    enviar = st.button("🚀 Enviar Solicitação para Aprovação", use_container_width=True)
+    
+    if enviar:
+        if bloqueio:
+            st.error("Envio bloqueado devido a inconsistências nas datas.")
+        elif not justificativa.strip():
+            st.error("A justificativa é obrigatória.")
+        else:
+            novo_pedido = {
+                "id": len(st.session_state["agendamentos"]) + 1,
+                "colaborador": solicitante,
+                "tipo": tipo,
+                "modo": "Horas Parciais" if "Parcial" in modo_tempo else "Dias Inteiros",
+                "inicio": dt_inicio,
+                "fim": dt_fim,
+                "detalhe_tempo": detalhe_str,
+                "justificativa": justificativa,
+                "status": "Pendente"
+            }
+            st.session_state["agendamentos"].append(novo_pedido)
+            st.balloons()
+            st.success("Solicitação enviada com sucesso! O gestor foi notificado.")
 
 # ---------------------------------------------------------
 # ABA 3: PAINEL DO GESTOR COM SENHA
