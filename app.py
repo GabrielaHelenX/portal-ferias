@@ -78,7 +78,7 @@ EQUIPE_DETALHES = {
 }
 EQUIPE = list(EQUIPE_DETALHES.keys())
 
-# Banco de dados temporário na memória (sem depender de arquivos Excel)
+# Banco de dados temporário na memória (sem arquivos físicos)
 if "agendamentos" not in st.session_state:
     st.session_state["agendamentos"] = [
         {
@@ -296,6 +296,6 @@ with aba_gestor:
         st.markdown("### Histórico Completo de Solicitações")
         df_historico = pd.DataFrame(st.session_state["agendamentos"])
         if not df_historico.empty:
-            st.dataframe(df_historico, use_container_width=True)
+            st.dataframe(df_historico, width='stretch')
         else:
             st.info("Nenhum registro no histórico.")
