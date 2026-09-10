@@ -4,74 +4,13 @@ import datetime
 import holidays
 
 # ---------------------------------------------------------
-# 1. CONFIGURAÇÃO DE TELA E DESIGN PROFISSIONAL
+# 1. CONFIGURAÇÃO DA PÁGINA
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="Portal de Férias & Ausências",
     page_icon="🌴",
     layout="wide"
 )
-
-# Estilização CSS Avançada (Modo Limpo / Clean UI)
-st.markdown("""
-    <style>
-    .stApp { background-color: #F8FAFC; }
-    
-    /* Cartões Modernos */
-    .metric-card {
-        background-color: #FFFFFF;
-        padding: 20px;
-        border-radius: 12px;
-        border: 1px solid #E2E8F0;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-        text-align: center;
-    }
-    
-    .event-card {
-        background-color: #FFFFFF;
-        padding: 16px;
-        border-radius: 10px;
-        border: 1px solid #E2E8F0;
-        border-left: 4px solid #2563EB;
-        margin-bottom: 12px;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
-    }
-    
-    .badge-status {
-        float: right;
-        padding: 4px 10px;
-        border-radius: 20px;
-        font-size: 11px;
-        font-weight: 600;
-    }
-    .status-aprovado { background-color: #DCFCE7; color: #166534; }
-    .status-pendente { background-color: #FEF9C3; color: #854D0E; }
-    
-    /* Alertas Personalizados */
-    .alert-box {
-        background-color: #FEF2F2;
-        color: #991B1B;
-        padding: 14px;
-        border-radius: 8px;
-        border-left: 4px solid #EF4444;
-        margin-top: 10px;
-        margin-bottom: 10px;
-        font-size: 14px;
-    }
-    
-    /* Botões */
-    .stButton>button {
-        background-color: #2563EB;
-        color: white;
-        border-radius: 8px;
-        font-weight: 600;
-        border: none;
-        width: 100%;
-        padding: 10px;
-    }
-    .stButton>button:hover { background-color: #1D4ED8; }
-    </style>
-""", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # 2. DADOS DA EQUIPE E LOCAIS (Feriados)
@@ -121,22 +60,21 @@ def checar_regras(nome_colaborador, dt_inicio, dt_fim):
     return erros, avisos
 
 # ---------------------------------------------------------
-# 4. INTERFACE VISUAL LIMPA (UI / UX)
+# 4. INTERFACE VISUAL LIMPA E NATIVA
 # ---------------------------------------------------------
-st.title("🌴 Portal de Retenção Nacional — Férias & Ausências")
-st.markdown("Gerenciamento inteligente de equipe, sem tabelas pesadas e com validação automática de regras.")
-st.markdown("---")
+st.title("🌴 Portal de Retenção Nacional")
+st.caption("Gerenciamento integrado de férias e ausências da equipe.")
+st.divider()
 
 # Abas Limpas
 aba_painel, aba_solicitar, aba_gestor = st.tabs(["📊 Visão Geral da Equipe", "➕ Nova Solicitação", f"⚙️ Gestão ({GESTOR.split()[0]})"])
 
 # ---------------------------------------------------------
-# ABA 1: VISÃO GERAL (Substituindo a tabela feia por Cards)
+# ABA 1: VISÃO GERAL
 # ---------------------------------------------------------
 with aba_painel:
     st.subheader("Painel de Ausências Ativas")
     
-    # Métricas de topo limpas
     c1, c2, c3 = st.columns(3)
     total_aprovados = sum(1 for r in st.session_state["agendamentos"] if r["status"] == "Aprovado")
     total_pendentes = sum(1 for r in st.session_state["agendamentos"] if r["status"] == "Pendente")
@@ -145,33 +83,34 @@ with aba_painel:
     c2.metric("Solicitações Pendentes", total_pendentes)
     c3.metric("Membros na Equipe", len(EQUIPE))
     
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.write("")
+    st.markdown("### Histórico de Registros")
     
     if st.session_state["agendamentos"]:
         for reg in st.session_state["agendamentos"]:
             dias = (reg["fim"] - reg["inicio"]).days + 1
-            status_class = "status-aprovado" if reg["status"] == "Aprovado" else "status-pendente"
             
-            # Renderização de card elegante em vez de tabela crua
-            st.markdown(f"""
-                <div class="event-card">
-                    <span class="badge-status {status_class}">{reg['status']}</span>
-                    <h4 style="margin: 0; color: #1E293B;">{reg['colaborador']}</h4>
-                    <p style="margin: 4px 0 0 0; color: #64748B; font-size: 14px;">
-                        📌 <b>{reg['tipo']}</b> | 📅 De <b>{reg['inicio'].strftime('%d/%m/%Y')}</b> até <b>{reg['fim'].strftime('%d/%m/%Y')}</b> ({dias} dias)
-                    </p>
-                </div>
-            """, unsafe_allow_html=True)
+            # Usando containers nativos do Streamlit para um visual limpo e sem falhas de cor
+            with st.container(border=True):
+                col_info1, col_info2 = st.columns([3, 1])
+                with col_info1:
+                    st.markdown(f"**{reg['colaborador']}**")
+                    st.caption(f"📌 **{reg['tipo']}** | 📅 De **{reg['inicio'].strftime('%d/%m/%Y')}** até **{reg['fim'].strftime('%d/%m/%Y')}** ({dias} dias)")
+                with col_info2:
+                    if reg["status"] == "Aprovado":
+                        st.success("Aprovado")
+                    else:
+                        st.warning("Pendente")
     else:
         st.info("Nenhuma ausência registrada no momento.")
 
 # ---------------------------------------------------------
-# ABA 2: NOVA SOLICITAÇÃO (Fluida e Intuitiva)
+# ABA 2: NOVA SOLICITAÇÃO
 # ---------------------------------------------------------
 with aba_solicitar:
     st.subheader("Nova Solicitação de Ausência")
     
-    with st.container():
+    with st.form("form_solicitacao"):
         col_s1, col_s2 = st.columns(2)
         with col_s1:
             solicitante = st.selectbox("Selecione seu Nome", EQUIPE)
@@ -190,7 +129,7 @@ with aba_solicitar:
                 qnt = (dt_fim - dt_inicio).days + 1
 
         retorno = dt_fim + datetime.timedelta(days=1)
-        st.markdown(f"💡 **Retorno ao trabalho:** {retorno.strftime('%d/%m/%Y')} ({qnt} dias contabilizados)")
+        st.info(f"💡 **Retorno ao trabalho:** {retorno.strftime('%d/%m/%Y')} ({qnt} dias contabilizados)")
         
         # Validações em tempo real
         erros, avisos = checar_regras(solicitante, dt_inicio, dt_fim)
@@ -199,7 +138,7 @@ with aba_solicitar:
         if erros:
             bloqueio = True
             for e in erros:
-                st.markdown(f'<div class="alert-box">❌ <b>Restrição de Política:</b> {e}</div>', unsafe_allow_html=True)
+                st.error(f"❌ **Restrição de Política:** {e}")
                 
         if avisos:
             for a in avisos:
@@ -208,20 +147,23 @@ with aba_solicitar:
         if not erros and not avisos:
             st.success("✅ Período livre de conflitos e de acordo com as regras de feriados.")
             
-        st.markdown("<br>", unsafe_allow_html=True)
+        enviar = st.form_submit_button("🚀 Enviar Solicitação para o Gestor", use_container_width=True)
         
-        if st.button("🚀 Enviar Solicitação para o Gestor", disabled=bloqueio):
-            novo = {
-                "id": len(st.session_state["agendamentos"]) + 1,
-                "colaborador": solicitante,
-                "tipo": tipo,
-                "inicio": dt_inicio,
-                "fim": dt_fim,
-                "status": "Pendente"
-            }
-            st.session_state["agendamentos"].append(novo)
-            st.balloons()
-            st.success("Solicitação enviada com sucesso! O gestor foi avisado.")
+        if enviar:
+            if bloqueio:
+                st.error("Não é possível enviar a solicitação devido às restrições acima.")
+            else:
+                novo = {
+                    "id": len(st.session_state["agendamentos"]) + 1,
+                    "colaborador": solicitante,
+                    "tipo": tipo,
+                    "inicio": dt_inicio,
+                    "fim": dt_fim,
+                    "status": "Pendente"
+                }
+                st.session_state["agendamentos"].append(novo)
+                st.balloons()
+                st.success("Solicitação enviada com sucesso! O gestor foi avisado.")
 
 # ---------------------------------------------------------
 # ABA 3: ÁREA DO GESTOR (DANILO)
@@ -233,23 +175,18 @@ with aba_gestor:
     
     if pendentes:
         for p in pendentes:
-            st.markdown(f"""
-                <div class="event-card" style="border-left-color: #EAB308;">
-                    <h4 style="margin: 0; color: #1E293B;">{p['colaborador']}</h4>
-                    <p style="margin: 4px 0 8px 0; color: #64748B; font-size: 14px;">
-                        📌 <b>{p['tipo']}</b> | 📅 {p['inicio'].strftime('%d/%m/%Y')} até {p['fim'].strftime('%d/%m/%Y')}
-                    </p>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            b1, b2 = st.columns(2)
-            with b1:
-                if st.button(f"✅ Aprovar", key=f"ok_{p['id']}"):
-                    p["status"] = "Aprovado"
-                    st.rerun()
-            with b2:
-                if st.button(f"❌ Rejeitar", key=f"no_{p['id']}"):
-                    p["status"] = "Rejeitado"
-                    st.rerun()
+            with st.container(border=True):
+                st.markdown(f"**{p['colaborador']}**")
+                st.caption(f"📌 **{p['tipo']}** | 📅 {p['inicio'].strftime('%d/%m/%Y')} até {p['fim'].strftime('%d/%m/%Y')}")
+                
+                b1, b2 = st.columns(2)
+                with b1:
+                    if st.button(f"✅ Aprovar ID {p['id']}", key=f"ok_{p['id']}", use_container_width=True):
+                        p["status"] = "Aprovado"
+                        st.rerun()
+                with b2:
+                    if st.button(f"❌ Rejeitar ID {p['id']}", key=f"no_{p['id']}", use_container_width=True):
+                        p["status"] = "Rejeitado"
+                        st.rerun()
     else:
         st.success("🎉 Nenhuma solicitação pendente para análise.")
