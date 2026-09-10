@@ -80,7 +80,7 @@ if "agendamentos" not in st.session_state:
             "modo": "Dias Inteiros",
             "inicio": datetime.date(2024, 12, 10),
             "fim": datetime.date(2025, 12, 9),
-            "detalhe_tempo": "20 dias",
+            "detalhe_tempo": "365 dias",
             "justificativa": "Férias anuais programadas",
             "status": "Aprovado"
         },
@@ -213,7 +213,7 @@ with aba_painel:
         st.info("Nenhuma ausência confirmada no momento.")
 
 # ---------------------------------------------------------
-# ABA 2: NOVA SOLICITAÇÃO (Corrigido para exibir corretamente Dias vs Horas)
+# ABA 2: NOVA SOLICITAÇÃO (Calendário Início/Fim perfeito)
 # ---------------------------------------------------------
 with aba_solicitar:
     st.subheader("Registrar Nova Solicitação de Ausência")
@@ -223,26 +223,34 @@ with aba_solicitar:
         solicitante = perfil_usuario
         st.write(f"✍️ Solicitante: **{solicitante}**")
 
-        # Sem folga de aniversário, apenas Férias ou Banco de Horas
         tipo = st.radio("Modalidade", ["Férias", "Banco de Horas / Abono"], horizontal=True)
-        modo_tempo = st.radio("Duração da Ausência", ["Dias Inteiros", "Horário Específico (Parcial)"], horizontal=True)
+        modo_tempo = st.radio("Duração da Ausência", ["Dias Inteiros (Início e Fim)", "Horário Específico (Parcial)"], horizontal=True)
         
-        # Lógica condicional exata para não misturar os campos
-        if modo_tempo == "Dias Inteiros":
+        if modo_tempo == "Dias Inteiros (Início e Fim)":
             c1, c2 = st.columns(2)
             with c1:
                 dt_inicio = st.date_input("Data de Início", datetime.date.today())
             with c2:
-                qnt_dias = st.number_input("Quantidade de Dias", min_value=1, max_value=30, value=10, step=1)
+                dt_fim = st.date_input("Data de Término", datetime.date.today() + datetime.timedelta(days=5))
             
-            dt_fim = dt_inicio + datetime.timedelta(days=int(qnt_dias) - 1)
+            # Cálculo matemático exato baseado nas datas reais selecionadas no calendário
+            if dt_fim >= dt_inicio:
+                qnt_dias = (dt_fim - dt_inicio).days + 1
+            else:
+                qnt_dias = 0
+                
             retorno = dt_fim + datetime.timedelta(days=1)
-            detalhe_str = f"{int(qnt_dias)} dias"
-            st.markdown(f"💡 **Período de Ausência:** De {dt_inicio.strftime('%d/%m/%Y')} até {dt_fim.strftime('%d/%m/%Y')} ({int(qnt_dias)} dias). Retorno em: {retorno.strftime('%d/%m/%Y')}")
+            detalhe_str = f"{qnt_dias} dias"
+            
+            if qnt_dias > 0:
+                st.markdown(f"💡 **Resumo:** De **{dt_inicio.strftime('%d/%m/%Y')}** até **{dt_fim.strftime('%d/%m/%Y')}** (**{qnt_dias} dias** no total). Retorno em: {retorno.strftime('%d/%m/%Y')}")
+            else:
+                st.error("❌ A data de término deve ser igual ou posterior à data de início.")
         else:
-            # Horário Específico (Parcial) -> Some os dias e aparecem as horas
+            # Modo Parcial (Abre o relógio/horários apenas aqui)
             dt_inicio = st.date_input("Data da Ausência", datetime.date.today())
             dt_fim = dt_inicio
+            qnt_dias = 1
             
             c_h1, c_h2 = st.columns(2)
             with c_h1:
@@ -251,13 +259,17 @@ with aba_solicitar:
                 hora_fim = st.time_input("Horário de Retorno", datetime.time(12, 0))
             
             detalhe_str = f"Das {hora_inicio.strftime('%H:%M')} às {hora_fim.strftime('%H:%M')}"
-            st.markdown(f"💡 **Resumo do Horário:** Ausente no dia {dt_inicio.strftime('%d/%m/%Y')} ({detalhe_str})")
+            st.markdown(f"💡 **Resumo do Horário Parcial:** Ausente no dia {dt_inicio.strftime('%d/%m/%Y')} ({detalhe_str})")
 
         justificativa = st.text_area("Justificativa / Motivo", placeholder="Ex: Consulta médica, compromisso pessoal, descanso...")
         
         erros, avisos = checar_regras(solicitante, dt_inicio, dt_fim)
         bloqueio = False
         
+        if modo_tempo == "Dias Inteiros (Início e Fim)" and dt_fim < dt_inicio:
+            bloqueio = True
+            erros.append("A data de término não pode ser anterior à data de início.")
+
         if erros:
             bloqueio = True
             for e in erros:
@@ -270,7 +282,7 @@ with aba_solicitar:
         
         if enviar:
             if bloqueio:
-                st.error("Envio bloqueado por regras de feriados ou fins de semana.")
+                st.error("Envio bloqueado devido a inconsistências nas datas.")
             elif not justificativa.strip():
                 st.error("A justificativa é obrigatória.")
             else:
@@ -278,7 +290,7 @@ with aba_solicitar:
                     "id": len(st.session_state["agendamentos"]) + 1,
                     "colaborador": solicitante,
                     "tipo": tipo,
-                    "modo": modo_tempo,
+                    "modo": "Horas Parciais" if "Parcial" in modo_tempo else "Dias Inteiros",
                     "inicio": dt_inicio,
                     "fim": dt_fim,
                     "detalhe_tempo": detalhe_str,
@@ -358,3 +370,4 @@ with aba_gestor:
         st.error("❌ Senha incorreta. Apenas o gestor autorizado possui a senha de acesso.")
     else:
         st.info("🔒 Por favor, digite a senha para visualizar o painel gerencial. (Dica: A senha inicial padrão é **1234**, e você pode alterá-la na caixinha acima a qualquer momento).")
+            
