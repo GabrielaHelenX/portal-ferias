@@ -5,7 +5,7 @@ import holidays
 import os
 
 # ---------------------------------------------------------
-# 1. CONFIGURAÇÃO E DESIGN CLEAN (MODERNO & PROFISSIONAL)
+# 1. CONFIGURAÇÃO DA PÁGINA
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="Portal de Férias & Ausências | Ânima",
@@ -13,16 +13,12 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilização limpa, moderna e sem poluição visual (Padrão Clean UI)
 st.markdown("""
     <style>
     .stApp { background-color: #F8FAFC; }
-    
-    /* Tipografia elegante */
     h1 { color: #1E1B4B !important; font-weight: 800; font-size: 2rem !important; }
     h2, h3 { color: #312E81 !important; font-weight: 700; }
     
-    /* Banner de Aniversário Sofisticado */
     .bday-banner-clean {
         background: linear-gradient(135deg, #7C3AED 0%, #C084FC 100%);
         padding: 16px 24px;
@@ -35,22 +31,6 @@ st.markdown("""
         justify-content: space-between;
     }
     
-    /* Avatares circulares modernos */
-    .avatar-circle {
-        width: 42px;
-        height: 42px;
-        border-radius: 50%;
-        background-color: #EDE9FE;
-        color: #6D28D9;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: bold;
-        font-size: 14px;
-        border: 2px solid #DDD6FE;
-    }
-    
-    /* Botões com o roxo Ânima */
     .stButton>button {
         background-color: #7C3AED;
         color: white;
@@ -59,11 +39,9 @@ st.markdown("""
         border: none;
         width: 100%;
         padding: 10px;
-        transition: all 0.2s ease;
     }
     .stButton>button:hover {
         background-color: #6D28D9;
-        box-shadow: 0 4px 12px rgba(109, 40, 217, 0.25);
     }
     </style>
 """, unsafe_allow_html=True)
@@ -104,6 +82,13 @@ def carregar_dados():
         df = pd.read_excel(ARQUIVO_EXCEL)
         df['inicio'] = pd.to_datetime(df['inicio']).dt.date
         df['fim'] = pd.to_datetime(df['fim']).dt.date
+        
+        # Garante que a coluna 'dias' exista e seja calculada se faltar
+        if 'dias' not in df.columns:
+            df['dias'] = (df['fim'] - df['inicio']).dt.days + 1
+        if 'justificativa' not in df.columns:
+            df['justificativa'] = "Sem justificativa informada"
+            
         return df.to_dict('records')
     else:
         dados_iniciais = [
@@ -184,7 +169,6 @@ aba_painel, aba_solicitar, aba_gestor = st.tabs(["📊 Visão Geral & Equipe", "
 with aba_painel:
     st.subheader("Painel de Controle da Equipe")
     
-    # Métricas nativas limpas
     c1, c2, c3 = st.columns(3)
     aprovados_total = sum(1 for r in st.session_state["agendamentos"] if r["status"] == "Aprovado")
     pendentes_total = sum(1 for r in st.session_state["agendamentos"] if r["status"] == "Pendente")
@@ -198,7 +182,8 @@ with aba_painel:
     
     cols_saldo = st.columns(len(EQUIPE))
     for i, (colab, info) in enumerate(EQUIPE_DETALHES.items()):
-        dias_usados = sum(r['dias'] for r in st.session_state["agendamentos"] if r['colaborador'] == colab and r['tipo'] == 'Férias' and r['status'] == 'Aprovado')
+        # Garante leitura segura dos dias
+        dias_usados = sum(int(r.get('dias', (r['fim'] - r['inicio']).days + 1)) for r in st.session_state["agendamentos"] if r['colaborador'] == colab and r['tipo'] == 'Férias' and r['status'] == 'Aprovado')
         saldo_restante = info['saldo_ferias'] - dias_usados
         aniver_fmt = info['nascimento'].strftime('%d/%m')
         
@@ -214,13 +199,15 @@ with aba_painel:
     if aprovados:
         for reg in aprovados:
             iniciais = EQUIPE_DETALHES.get(reg['colaborador'], {}).get('iniciais', 'COL')
+            dias_reg = reg.get('dias', (reg['fim'] - reg['inicio']).days + 1)
+            just_reg = reg.get('justificativa', 'Sem justificativa')
+            
             with st.container(border=True):
                 col_i1, col_i2 = st.columns([4, 1])
                 with col_i1:
                     st.markdown(f"**{reg['colaborador']}**")
-                    st.caption(f"📌 **{reg['tipo']}** ({reg['dias']} dias) | 📅 De **{reg['inicio'].strftime('%d/%m/%Y')}** até **{reg['fim'].strftime('%d/%m/%Y')}**")
-                    if reg['justificativa']:
-                        st.text(f"Justificativa: {reg['justificativa']}")
+                    st.caption(f"📌 **{reg['tipo']}** ({dias_reg} dias) | 📅 De **{reg['inicio'].strftime('%d/%m/%Y')}** até **{reg['fim'].strftime('%d/%m/%Y')}**")
+                    st.text(f"Justificativa: {just_reg}")
                 with col_i2:
                     st.success("Aprovado")
     else:
@@ -303,10 +290,13 @@ with aba_gestor:
         
         if pendentes:
             for p in pendentes:
+                p_dias = p.get('dias', (p['fim'] - p['inicio']).days + 1)
+                p_just = p.get('justificativa', 'Sem justificativa')
+                
                 with st.container(border=True):
                     st.markdown(f"**{p['colaborador']}**")
-                    st.caption(f"📌 **{p['tipo']}** ({p['dias']} dias) | 📅 De {p['inicio'].strftime('%d/%m/%Y')} até {p['fim'].strftime('%d/%m/%Y')}")
-                    st.text(f"Justificativa: {p['justificativa']}")
+                    st.caption(f"📌 **{p['tipo']}** ({p_dias} dias) | 📅 De {p['inicio'].strftime('%d/%m/%Y')} até {p['fim'].strftime('%d/%m/%Y')}")
+                    st.text(f"Justificativa: {p_just}")
                     
                     b1, b2 = st.columns(2)
                     with b1:
