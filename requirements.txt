@@ -1,1 +1,1 @@
-streamlit, pandas, openpyxl
+streamlit
