@@ -2,35 +2,37 @@ import streamlit as st
 import pandas as pd
 import datetime
 import holidays
-import os
 
 # ---------------------------------------------------------
 # 1. CONFIGURAÇÃO DA PÁGINA
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="Portal de Férias & Ausências | Ânima",
+    page_title="Portal de Férias & Ausências | Planejamento",
     page_icon="🌴",
     layout="wide"
 )
 
+# Estilização limpa e profissional com detalhes em Roxo Ânima
 st.markdown("""
     <style>
     .stApp { background-color: #F8FAFC; }
-    h1 { color: #1E1B4B !important; font-weight: 800; font-size: 2rem !important; }
-    h2, h3 { color: #312E81 !important; font-weight: 700; }
+    h1 { color: #2E1065 !important; font-weight: 800; font-size: 2rem !important; }
+    h2, h3 { color: #4C1D95 !important; font-weight: 700; }
     
-    .bday-banner-clean {
+    /* Banner de Aniversário Elegante */
+    .bday-banner {
         background: linear-gradient(135deg, #7C3AED 0%, #C084FC 100%);
         padding: 16px 24px;
         border-radius: 12px;
         color: white;
-        margin-bottom: 24px;
-        box-shadow: 0 4px 20px rgba(124, 58, 237, 0.15);
+        margin-bottom: 20px;
+        box-shadow: 0 4px 15px rgba(124, 58, 237, 0.2);
         display: flex;
         align-items: center;
         justify-content: space-between;
     }
     
+    /* Botões personalizados com o Roxo Ânima */
     .stButton>button {
         background-color: #7C3AED;
         color: white;
@@ -42,6 +44,7 @@ st.markdown("""
     }
     .stButton>button:hover {
         background-color: #6D28D9;
+        color: white;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -75,45 +78,24 @@ EQUIPE_DETALHES = {
 }
 EQUIPE = list(EQUIPE_DETALHES.keys())
 
-ARQUIVO_EXCEL = "base_solicitacoes_ferias_anima.xlsx"
-
-def carregar_dados():
-    # Se o arquivo não existir, cria automaticamente para evitar erro
-    if not os.path.exists(ARQUIVO_EXCEL):
-        dados_iniciais = [
-            {
-                "id": 1,
-                "colaborador": "JOYCE ADRIELLE DIAS DA SILVA",
-                "tipo": "Férias",
-                "inicio": datetime.date(2026, 11, 10),
-                "fim": datetime.date(2026, 11, 20),
-                "dias": 11,
-                "justificativa": "Descanso anual programado",
-                "status": "Aprovado"
-            }
-        ]
-        df_ini = pd.DataFrame(dados_iniciais)
-        df_ini.to_excel(ARQUIVO_EXCEL, index=False)
-
-    # Lê o arquivo com segurança
-    df = pd.read_excel(ARQUIVO_EXCEL)
-    df['inicio'] = pd.to_datetime(df['inicio']).dt.date
-    df['fim'] = pd.to_datetime(df['fim']).dt.date
-    
-    if 'dias' not in df.columns:
-        df['dias'] = (df['fim'] - df['inicio']).dt.days + 1
-    if 'justificativa' not in df.columns:
-        df['justificativa'] = "Sem justificativa informada"
-        
-    return df.to_dict('records')
-
-def salvar_dados(lista_registros):
-    df = pd.DataFrame(lista_registros)
-    df.to_excel(ARQUIVO_EXCEL, index=False)
-
+# Banco de dados temporário na memória (sem depender de arquivos Excel)
 if "agendamentos" not in st.session_state:
-    st.session_state["agendamentos"] = carregar_dados()
+    st.session_state["agendamentos"] = [
+        {
+            "id": 1,
+            "colaborador": "JOYCE ADRIELLE DIAS DA SILVA",
+            "tipo": "Férias",
+            "inicio": datetime.date(2026, 11, 10),
+            "fim": datetime.date(2026, 11, 20),
+            "dias": 11,
+            "justificativa": "Descanso anual programado",
+            "status": "Aprovado"
+        }
+    ]
 
+# ---------------------------------------------------------
+# 3. VALIDAÇÕES DE REGRAS (Feriados Multi-Ano e Conflitos)
+# ---------------------------------------------------------
 def checar_regras(nome_colaborador, dt_inicio, dt_fim):
     detalhes = EQUIPE_DETALHES[nome_colaborador]
     ano_solicitacao = dt_inicio.year
@@ -135,11 +117,12 @@ def checar_regras(nome_colaborador, dt_inicio, dt_fim):
     return erros, avisos
 
 # ---------------------------------------------------------
-# 3. INTERFACE PRINCIPAL
+# 4. INTERFACE DO APLICATIVO
 # ---------------------------------------------------------
 st.title("🌴 Portal de Férias & Ausências")
 st.caption("Retenção Nacional — Gestão Dinâmica & Multi-Anual")
 
+# Alerta de Aniversário Dinâmico
 hoje = datetime.date.today()
 aniversariantes_hoje = [
     nome for nome, info in EQUIPE_DETALHES.items() 
@@ -149,10 +132,10 @@ aniversariantes_hoje = [
 if aniversariantes_hoje:
     nomes_str = " e ".join([n.title() for n in aniversariantes_hoje])
     st.markdown(f"""
-        <div class="bday-banner-clean">
+        <div class="bday-banner">
             <div>
                 <b style="font-size: 16px;">🎂 Aniversário da Equipe Hoje!</b>
-                <p style="margin: 2px 0 0 0; font-size: 14px; opacity: 0.9;">Parabéns a <b>{nomes_str}</b> pelo seu dia!</p>
+                <p style="margin: 2px 0 0 0; font-size: 14px; opacity: 0.95;">Parabéns a <b>{nomes_str}</b> pelo seu dia!</p>
             </div>
             <div style="font-size: 28px;">🎉</div>
         </div>
@@ -162,7 +145,9 @@ st.divider()
 
 aba_painel, aba_solicitar, aba_gestor = st.tabs(["📊 Visão Geral & Equipe", "➕ Nova Solicitação", f"⚙️ Gestão & Histórico ({GESTOR.split()[0]})"])
 
+# ---------------------------------------------------------
 # ABA 1: VISÃO GERAL
+# ---------------------------------------------------------
 with aba_painel:
     st.subheader("Painel de Controle da Equipe")
     
@@ -175,7 +160,7 @@ with aba_painel:
     c3.metric("Membros Ativos", len(EQUIPE))
     
     st.write("")
-    st.markdown("### 👥 Saldo Atual de Férias")
+    st.markdown("### 👥 Saldo Atual de Férias da Equipe")
     
     cols_saldo = st.columns(len(EQUIPE))
     for i, (colab, info) in enumerate(EQUIPE_DETALHES.items()):
@@ -209,7 +194,9 @@ with aba_painel:
     else:
         st.info("Nenhuma ausência aprovada no momento.")
 
+# ---------------------------------------------------------
 # ABA 2: NOVA SOLICITAÇÃO
+# ---------------------------------------------------------
 with aba_solicitar:
     st.subheader("Cadastrar Nova Solicitação")
     
@@ -267,15 +254,16 @@ with aba_solicitar:
                     "status": "Pendente"
                 }
                 st.session_state["agendamentos"].append(novo)
-                salvar_dados(st.session_state["agendamentos"])
                 st.balloons()
-                st.success("Solicitação enviada com sucesso! O Excel foi atualizado.")
+                st.success("Solicitação enviada com sucesso! O gestor foi notificado.")
 
+# ---------------------------------------------------------
 # ABA 3: GESTOR
+# ---------------------------------------------------------
 with aba_gestor:
     st.subheader(f"Painel Gerencial de {GESTOR}")
     
-    sub_aba1, sub_aba2 = st.tabs(["⏳ Pendentes de Aprovação", "📋 Histórico Geral & Excel"])
+    sub_aba1, sub_aba2 = st.tabs(["⏳ Pendentes de Aprovação", "📋 Histórico Geral da Equipe"])
     
     with sub_aba1:
         pendentes = [r for r in st.session_state["agendamentos"] if r["status"] == "Pendente"]
@@ -294,13 +282,11 @@ with aba_gestor:
                     with b1:
                         if st.button(f"✅ Aprovar #{p['id']}", key=f"ok_{p['id']}", use_container_width=True):
                             p["status"] = "Aprovado"
-                            salvar_dados(st.session_state["agendamentos"])
                             st.success("Aprovado com sucesso!")
                             st.rerun()
                     with b2:
                         if st.button(f"❌ Rejeitar #{p['id']}", key=f"no_{p['id']}", use_container_width=True):
                             p["status"] = "Rejeitado"
-                            salvar_dados(st.session_state["agendamentos"])
                             st.warning("Solicitação rejeitada.")
                             st.rerun()
         else:
@@ -311,13 +297,5 @@ with aba_gestor:
         df_historico = pd.DataFrame(st.session_state["agendamentos"])
         if not df_historico.empty:
             st.dataframe(df_historico, use_container_width=True)
-            
-            with open(ARQUIVO_EXCEL, "rb") as file:
-                st.download_button(
-                    label="📥 Baixar Planilha Excel Atualizada",
-                    data=file,
-                    file_name="controle_ferias_anima.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
         else:
             st.info("Nenhum registro no histórico.")
