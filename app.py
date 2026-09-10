@@ -78,19 +78,8 @@ EQUIPE = list(EQUIPE_DETALHES.keys())
 ARQUIVO_EXCEL = "base_solicitacoes_ferias_anima.xlsx"
 
 def carregar_dados():
-    if os.path.exists(ARQUIVO_EXCEL):
-        df = pd.read_excel(ARQUIVO_EXCEL)
-        df['inicio'] = pd.to_datetime(df['inicio']).dt.date
-        df['fim'] = pd.to_datetime(df['fim']).dt.date
-        
-        # Garante que a coluna 'dias' exista e seja calculada se faltar
-        if 'dias' not in df.columns:
-            df['dias'] = (df['fim'] - df['inicio']).dt.days + 1
-        if 'justificativa' not in df.columns:
-            df['justificativa'] = "Sem justificativa informada"
-            
-        return df.to_dict('records')
-    else:
+    # Se o arquivo não existir, cria automaticamente para evitar erro
+    if not os.path.exists(ARQUIVO_EXCEL):
         dados_iniciais = [
             {
                 "id": 1,
@@ -103,9 +92,20 @@ def carregar_dados():
                 "status": "Aprovado"
             }
         ]
-        df = pd.DataFrame(dados_iniciais)
-        df.to_excel(ARQUIVO_EXCEL, index=False)
-        return dados_iniciais
+        df_ini = pd.DataFrame(dados_iniciais)
+        df_ini.to_excel(ARQUIVO_EXCEL, index=False)
+
+    # Lê o arquivo com segurança
+    df = pd.read_excel(ARQUIVO_EXCEL)
+    df['inicio'] = pd.to_datetime(df['inicio']).dt.date
+    df['fim'] = pd.to_datetime(df['fim']).dt.date
+    
+    if 'dias' not in df.columns:
+        df['dias'] = (df['fim'] - df['inicio']).dt.days + 1
+    if 'justificativa' not in df.columns:
+        df['justificativa'] = "Sem justificativa informada"
+        
+    return df.to_dict('records')
 
 def salvar_dados(lista_registros):
     df = pd.DataFrame(lista_registros)
@@ -140,7 +140,6 @@ def checar_regras(nome_colaborador, dt_inicio, dt_fim):
 st.title("🌴 Portal de Férias & Ausências")
 st.caption("Retenção Nacional — Gestão Dinâmica & Multi-Anual")
 
-# Aniversariantes do dia
 hoje = datetime.date.today()
 aniversariantes_hoje = [
     nome for nome, info in EQUIPE_DETALHES.items() 
@@ -163,9 +162,7 @@ st.divider()
 
 aba_painel, aba_solicitar, aba_gestor = st.tabs(["📊 Visão Geral & Equipe", "➕ Nova Solicitação", f"⚙️ Gestão & Histórico ({GESTOR.split()[0]})"])
 
-# ---------------------------------------------------------
 # ABA 1: VISÃO GERAL
-# ---------------------------------------------------------
 with aba_painel:
     st.subheader("Painel de Controle da Equipe")
     
@@ -182,7 +179,6 @@ with aba_painel:
     
     cols_saldo = st.columns(len(EQUIPE))
     for i, (colab, info) in enumerate(EQUIPE_DETALHES.items()):
-        # Garante leitura segura dos dias
         dias_usados = sum(int(r.get('dias', (r['fim'] - r['inicio']).days + 1)) for r in st.session_state["agendamentos"] if r['colaborador'] == colab and r['tipo'] == 'Férias' and r['status'] == 'Aprovado')
         saldo_restante = info['saldo_ferias'] - dias_usados
         aniver_fmt = info['nascimento'].strftime('%d/%m')
@@ -213,9 +209,7 @@ with aba_painel:
     else:
         st.info("Nenhuma ausência aprovada no momento.")
 
-# ---------------------------------------------------------
 # ABA 2: NOVA SOLICITAÇÃO
-# ---------------------------------------------------------
 with aba_solicitar:
     st.subheader("Cadastrar Nova Solicitação")
     
@@ -277,9 +271,7 @@ with aba_solicitar:
                 st.balloons()
                 st.success("Solicitação enviada com sucesso! O Excel foi atualizado.")
 
-# ---------------------------------------------------------
 # ABA 3: GESTOR
-# ---------------------------------------------------------
 with aba_gestor:
     st.subheader(f"Painel Gerencial de {GESTOR}")
     
