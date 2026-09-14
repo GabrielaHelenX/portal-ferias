@@ -2,9 +2,10 @@ import streamlit as st
 import pandas as pd
 import datetime
 import holidays
+import sqlite3
 
 # ---------------------------------------------------------
-# 1. CONFIGURAÇÃO DA PÁGINA & BANCO DE DADOS LOCAL NA NUVEM
+# 1. CONFIGURAÇÃO DA PÁGINA & BANCO DE DADOS SQLite NATIVO
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="Portal de Férias & Ausências | Ânima",
@@ -12,72 +13,86 @@ st.set_page_config(
     layout="wide"
 )
 
-# Conexão nativa do Streamlit com banco SQLite (cria um arquivo .db local nos bastidores que nunca apaga)
-conn = st.connection("sql", type="sql")
+# Função para conectar ao banco de dados SQLite local ("banco_ferias.db")
+def obter_conexao():
+    conn = sqlite3.connect("banco_ferias.db", check_same_thread=False)
+    return conn
 
-# Cria a tabela de agendamentos automaticamente se ela não existir
-conn.query("""
-    CREATE TABLE IF NOT EXISTS agendamentos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        colaborador TEXT,
-        tipo TEXT,
-        modo TEXT,
-        inicio TEXT,
-        fim TEXT,
-        detalhe_tempo TEXT,
-        justificativa TEXT,
-        status TEXT
-    );
-""", ttl=0)
+# Cria a tabela automaticamente se não existir
+def inicializar_banco():
+    conn = obter_conexao()
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS agendamentos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            colaborador TEXT,
+            tipo TEXT,
+            modo TEXT,
+            inicio TEXT,
+            fim TEXT,
+            detalhe_tempo TEXT,
+            justificativa TEXT,
+            status TEXT
+        );
+    """)
+    conn.commit()
+    conn.close()
+
+inicializar_banco()
 
 def carregar_dados():
-    try:
-        df = conn.query("SELECT * FROM agendamentos;", ttl=0)
-        if df.empty:
-            # Se a tabela estiver vazia, insere o registro inicial padrão do Kelvyn
-            conn.query("""
-                INSERT INTO agendamentos (colaborador, tipo, modo, inicio, fim, detalhe_tempo, justificativa, status)
-                VALUES ('KELVYN AMARAL CANDIDO', 'Férias', 'Dias Inteiros', '2026-11-13', '2026-11-27', '15 dias', 'Férias programadas de novembro', 'Aprovado');
-            """, ttl=0)
-            df = conn.query("SELECT * FROM agendamentos;", ttl=0)
+    conn = obter_conexao()
+    df = pd.read_sql_query("SELECT * FROM agendamentos", conn)
+    conn.close()
+    
+    if df.empty:
+        # Insere o registro padrão inicial se a tabela estiver totalmente vazia
+        conn = obter_conexao()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO agendamentos (colaborador, tipo, modo, inicio, fim, detalhe_tempo, justificativa, status)
+            VALUES ('KELVYN AMARAL CANDIDO', 'Férias', 'Dias Inteiros', '2026-11-13', '2026-11-27', '15 dias', 'Férias programadas de novembro', 'Aprovado');
+        """)
+        conn.commit()
+        conn.close()
         
-        # Converte as colunas de texto de data de volta para o formato de data do Python
-        if not df.empty:
-            df["inicio"] = pd.to_datetime(df["inicio"]).dt.date
-            df["fim"] = pd.to_datetime(df["fim"]).dt.date
-            df["id"] = pd.to_numeric(df["id"], errors="coerce")
-        return df.to_dict(orient="records")
-    except Exception as e:
-        st.error(f"Erro ao carregar dados: {e}")
-        return []
+        conn = obter_conexao()
+        df = pd.read_sql_query("SELECT * FROM agendamentos", conn)
+        conn.close()
+        
+    if not df.empty:
+        df["inicio"] = pd.to_datetime(df["inicio"]).dt.date
+        df["fim"] = pd.to_datetime(df["fim"]).dt.date
+        df["id"] = pd.to_numeric(df["id"], errors="coerce")
+    return df.to_dict(orient="records")
 
 def salvar_novo_pedido(pedido):
-    try:
-        conn.query(f"""
-            INSERT INTO agendamentos (colaborador, tipo, modo, inicio, fim, detalhe_tempo, justificativa, status)
-            VALUES (
-                '{pedido["colaborador"]}', 
-                '{pedido["tipo"]}', 
-                '{pedido["modo"]}', 
-                '{pedido["inicio"]}', 
-                '{pedido["fim"]}', 
-                '{pedido["detalhe_tempo"]}', 
-                '{pedido["justificativa"]}', 
-                '{pedido["status"]}'
-            );
-        """, ttl=0)
-    except Exception as e:
-        st.error(f"Erro ao salvar pedido: {e}")
+    conn = obter_conexao()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO agendamentos (colaborador, tipo, modo, inicio, fim, detalhe_tempo, justificativa, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+    """, (
+        pedido["colaborador"],
+        pedido["tipo"],
+        pedido["modo"],
+        pedido["inicio"],
+        pedido["fim"],
+        pedido["detalhe_tempo"],
+        pedido["justificativa"],
+        pedido["status"]
+    ))
+    conn.commit()
+    conn.close()
 
 def atualizar_status_pedido(id_pedido, novo_status):
-    try:
-        conn.query(f"""
-            UPDATE agendamentos 
-            SET status = '{novo_status}' 
-            WHERE id = {id_pedido};
-        """, ttl=0)
-    except Exception as e:
-        st.error(f"Erro ao atualizar status: {e}")
+    conn = obter_conexao()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE agendamentos SET status = ? WHERE id = ?;
+    """, (novo_status, id_pedido))
+    conn.commit()
+    conn.close()
 
 # Carrega os dados para a sessão
 st.session_state["agendamentos"] = carregar_dados()
