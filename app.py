@@ -101,7 +101,7 @@ def excluir_pedido(id_pedido):
 
 st.session_state["agendamentos"] = carregar_dados()
 
-# Estilização Global Forçada (Dark Mode Perfeito & Caixa de Texto Ajustada)
+# Estilização Global Forçada (Dark Mode Perfeito & Alta Legibilidade)
 st.markdown("""
     <style>
     .stApp { background-color: #0F172A; color: #F8FAFC; }
@@ -117,7 +117,8 @@ st.markdown("""
     h1 { color: #F3E8FF !important; font-weight: 800; font-size: 1.8rem !important; }
     h2, h3 { color: #E9D5FF !important; font-weight: 700; }
     
-    label, p, span {
+    /* Garante que qualquer texto solto ou parágrafo fique claro e legível */
+    label, p, span, div {
         color: #E2E8F0;
     }
     
@@ -158,6 +159,7 @@ st.markdown("""
         border: 1px solid #9F1239;
     }
     
+    /* Botões principais */
     .stButton>button {
         background-color: #7C3AED;
         color: white;
@@ -170,6 +172,17 @@ st.markdown("""
     .stButton>button:hover {
         background-color: #6D28D9;
         color: white;
+    }
+
+    /* Botão de download estilizado para destacar com texto branco */
+    [data-testid="stDownloadButton"]>button {
+        background-color: #065F46 !important;
+        color: #FFFFFF !important;
+        font-weight: bold;
+    }
+    [data-testid="stDownloadButton"]>button:hover {
+        background-color: #047857 !important;
+        color: #FFFFFF !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -211,7 +224,6 @@ def checar_regras(nome_colaborador, dt_inicio, dt_fim):
     if feriados_no_periodo:
         avisos.append(f"Feriado(s) identificado(s) no meio do período: {', '.join(feriados_no_periodo)}.")
 
-    # TRAVA ANTIDUPLICIDADE: Verifica se a MESMA pessoa já tem um pedido PENDENTE ou APROVADO no mesmo período exato
     for reg in st.session_state["agendamentos"]:
         if reg["colaborador"] == nome_colaborador and str(reg["status"]).strip().lower() in ["pendente", "aprovado"]:
             if dt_inicio == reg["inicio"] and dt_fim == reg["fim"]:
@@ -403,7 +415,6 @@ with aba_solicitar:
             salvar_novo_pedido(novo_pedido)
             st.balloons()
             
-            # MENSAGEM CLARA E FIXA NA TELA (O usuário precisa clicar para ver/continuar)
             st.success("🎉 Solicitação enviada com sucesso para aprovação do gestor!")
             st.info("ℹ️ Seu pedido já está registrado no sistema e aguardando análise. Clique no botão abaixo para voltar ao painel principal.")
             
@@ -497,7 +508,7 @@ if aba_gestor is not None:
                     for reg in todos_regs:
                         col_h1, col_h2 = st.columns([4, 1])
                         with col_h1:
-                            st.text(f"ID #{reg['id']} | {reg['colaborador']} | {reg['tipo']} | De {reg['inicio']} até {reg['fim']} [{reg['status']}]")
+                            st.markdown(f"<span style='color: #F8FAFC;'>ID #{reg['id']} | <b>{reg['colaborador']}</b> | {reg['tipo']} | De {reg['inicio']} até {reg['fim']} [{reg['status']}]</span>", unsafe_allow_html=True)
                         with col_h2:
                             if st.button(f"🗑️ Apagar", key=f"del_hist_{reg['id']}", width='stretch'):
                                 excluir_pedido(reg['id'])
