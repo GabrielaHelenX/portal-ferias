@@ -13,13 +13,11 @@ st.set_page_config(
     layout="wide"
 )
 
-# Função para conectar ao banco de dados SQLite local com UTF-8 garantido
 def obter_conexao():
     conn = sqlite3.connect("banco_ferias.db", check_same_thread=False)
     conn.text_factory = str
     return conn
 
-# Cria a tabela automaticamente se não existir
 def inicializar_banco():
     conn = obter_conexao()
     cursor = conn.cursor()
@@ -91,6 +89,13 @@ def atualizar_status_pedido(id_pedido, novo_status):
     cursor.execute("""
         UPDATE agendamentos SET status = ? WHERE id = ?;
     """, (novo_status, id_pedido))
+    conn.commit()
+    conn.close()
+
+def excluir_pedido(id_pedido):
+    conn = obter_conexao()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM agendamentos WHERE id = ?;", (id_pedido,))
     conn.commit()
     conn.close()
 
@@ -188,10 +193,6 @@ def checar_regras(nome_colaborador, dt_inicio, dt_fim):
     if feriados_no_periodo:
         avisos.append(f"Feriado(s) identificado(s) no meio do período: {', '.join(feriados_no_periodo)}.")
 
-    for reg in st.session_state["agendamentos"]:
-        if reg["colaborador"] != nome_colaborador and str(reg["status"]).strip().lower() == "aprovado":
-            if dt_inicio <= reg["fim"] and dt_fim >= reg["inicio"]:
-                avisos.append(f"Atenção: {reg['colaborador'].split()[0]} já estará ausente neste mesmo período.")
     return erros, avisos
 
 # ---------------------------------------------------------
@@ -297,100 +298,90 @@ with aba_solicitar:
     solicitante = perfil_usuario
     st.write(f"✍️ Solicitante: **{solicitante}**")
 
-    # VERIFICAÇÃO ANTIDUPLICIDADE: Checa se já existe pedido Pendente ou Aprovado para este colaborador
-    pedidos_existentes_colab = [
-        r for r in st.session_state["agendamentos"] 
-        if r["colaborador"] == solicitante and str(r["status"]).strip().lower() in ["pendente", "aprovado"]
-    ]
-
-    if pedidos_existentes_colab:
-        st.warning(f"⚠️ **Atenção:** Você ({solicitante.split()[0]}) já possui uma solicitação registrada com status **{pedidos_existentes_colab[-1]['status']}** em andamento. Novas solicitações estão temporariamente bloqueadas para evitar duplicidade.")
-    else:
-        tipo = st.radio("Modalidade", ["Férias", "Banco de Horas / Abono"], horizontal=True)
-        modo_tempo = st.radio("Duração da Ausência", ["Dias Inteiros (Início e Fim)", "Horário Específico (Parcial)"], horizontal=True)
+    tipo = st.radio("Modalidade", ["Férias", "Banco de Horas / Abono"], horizontal=True)
+    modo_tempo = st.radio("Duração da Ausência", ["Dias Inteiros (Início e Fim)", "Horário Específico (Parcial)"], horizontal=True)
+    
+    dt_inicio = datetime.date.today()
+    dt_fim = datetime.date.today()
+    detalhe_str = ""
+    
+    if modo_tempo == "Dias Inteiros (Início e Fim)":
+        c1, c2 = st.columns(2)
+        with c1:
+            dt_inicio = st.date_input("Data de Início", datetime.date.today())
+        with c2:
+            dt_fim = st.date_input("Data de Término", datetime.date.today() + datetime.timedelta(days=5))
         
-        dt_inicio = datetime.date.today()
-        dt_fim = datetime.date.today()
-        detalhe_str = ""
-        
-        if modo_tempo == "Dias Inteiros (Início e Fim)":
-            c1, c2 = st.columns(2)
-            with c1:
-                dt_inicio = st.date_input("Data de Início", datetime.date.today())
-            with c2:
-                dt_fim = st.date_input("Data de Término", datetime.date.today() + datetime.timedelta(days=5))
-            
-            if dt_fim >= dt_inicio:
-                qnt_dias = (dt_fim - dt_inicio).days + 1
-            else:
-                qnt_dias = 0
-                
-            retorno = dt_fim + datetime.timedelta(days=1)
-            detalhe_str = f"{qnt_dias} dias"
-            
-            if qnt_dias > 0:
-                st.markdown(f"💡 **Resumo Dinâmico:** De **{dt_inicio.strftime('%d/%m/%Y')}** até **{dt_fim.strftime('%d/%m/%Y')}** (**{qnt_dias} dias** no total). Retorno em: {retorno.strftime('%d/%m/%Y')}")
-            else:
-                st.error("❌ A data de término deve ser igual ou posterior à data de início.")
+        if dt_fim >= dt_inicio:
+            qnt_dias = (dt_fim - dt_inicio).days + 1
         else:
-            st.markdown("---")
-            st.markdown("🕒 **Defina o período da ausência parcial neste dia:**")
+            qnt_dias = 0
             
-            dt_inicio = st.date_input("Data da Ausência Parcial", datetime.date.today())
-            dt_fim = dt_inicio
-            
-            c_h1, c_h2 = st.columns(2)
-            with c_h1:
-                hora_inicio = st.time_input("Horário de Saída / Início", datetime.time(9, 0))
-            with c_h2:
-                hora_fim = st.time_input("Horário de Retorno / Término", datetime.time(12, 0))
-            
-            detalhe_str = f"Das {hora_inicio.strftime('%H:%M')} às {hora_fim.strftime('%H:%M')}"
-            st.markdown(f"💡 **Resumo do Horário:** Ausente no dia **{dt_inicio.strftime('%d/%m/%Y')}** ({detalhe_str})")
-            st.markdown("---")
+        retorno = dt_fim + datetime.timedelta(days=1)
+        detalhe_str = f"{qnt_dias} dias"
+        
+        if qnt_dias > 0:
+            st.markdown(f"💡 **Resumo Dinâmico:** De **{dt_inicio.strftime('%d/%m/%Y')}** até **{dt_fim.strftime('%d/%m/%Y')}** (**{qnt_dias} dias** no total). Retorno em: {retorno.strftime('%d/%m/%Y')}")
+        else:
+            st.error("❌ A data de término deve ser igual ou posterior à data de início.")
+    else:
+        st.markdown("---")
+        st.markdown("🕒 **Defina o período da ausência parcial neste dia:**")
+        
+        dt_inicio = st.date_input("Data da Ausência Parcial", datetime.date.today())
+        dt_fim = dt_inicio
+        
+        c_h1, c_h2 = st.columns(2)
+        with c_h1:
+            hora_inicio = st.time_input("Horário de Saída / Início", datetime.time(9, 0))
+        with c_h2:
+            hora_fim = st.time_input("Horário de Retorno / Término", datetime.time(12, 0))
+        
+        detalhe_str = f"Das {hora_inicio.strftime('%H:%M')} às {hora_fim.strftime('%H:%M')}"
+        st.markdown(f"💡 **Resumo do Horário:** Ausente no dia **{dt_inicio.strftime('%d/%m/%Y')}** ({detalhe_str})")
+        st.markdown("---")
 
-        justificativa = st.text_area("Justificativa / Motivo", placeholder="Ex: Consulta médica, compromisso pessoal, descanso...")
-        
-        erros, avisos = checar_regras(solicitante, dt_inicio, dt_fim)
-        bloqueio = False
-        
-        if modo_tempo == "Dias Inteiros (Início e Fim)" and dt_fim < dt_inicio:
-            bloqueio = True
-            erros.append("A data de término não pode ser anterior à data de início.")
+    justificativa = st.text_area("Justificativa / Motivo", placeholder="Ex: Consulta médica, compromisso pessoal, descanso...")
+    
+    erros, avisos = checar_regras(solicitante, dt_inicio, dt_fim)
+    bloqueio = False
+    
+    if modo_tempo == "Dias Inteiros (Início e Fim)" and dt_fim < dt_inicio:
+        bloqueio = True
+        erros.append("A data de término não pode ser anterior à data de início.")
 
-        if erros:
-            bloqueio = True
-            for e in erros:
-                st.error(f"❌ {e}")
-        if avisos:
-            for a in avisos:
-                st.warning(f"⚠️ {a}")
-                
-        enviar = st.button("🚀 Enviar Solicitação para Aprovação", width='stretch')
-        
-        if enviar:
-            if bloqueio:
-                st.error("Envio bloqueado devido a inconsistências nas datas.")
-            elif not justificativa.strip():
-                st.error("A justificativa é obrigatória.")
-            else:
-                novo_pedido = {
-                    "colaborador": solicitante,
-                    "tipo": tipo,
-                    "modo": "Horas Parciais" if "Parcial" in modo_tempo else "Dias Inteiros",
-                    "inicio": str(dt_inicio),
-                    "fim": str(dt_fim),
-                    "detalhe_tempo": detalhe_str,
-                    "justificativa": justificativa,
-                    "status": "Pendente"
-                }
-                salvar_novo_pedido(novo_pedido)
-                st.success("✅ Solicitação enviada com sucesso! Redirecionando para o calendário...")
-                st.balloons()
-                
-                # RECARREGA OS DADOS E REDIRECIONA AUTOMATICAMENTE PARA A PÁGINA INICIAL (ABA 1)
-                st.session_state["agendamentos"] = carregar_dados()
-                st.rerun()
+    if erros:
+        bloqueio = True
+        for e in erros:
+            st.error(f"❌ {e}")
+    if avisos:
+        for a in avisos:
+            st.warning(f"⚠️ {a}")
+            
+    enviar = st.button("🚀 Enviar Solicitação para Aprovação", width='stretch')
+    
+    if enviar:
+        if bloqueio:
+            st.error("Envio bloqueado devido a inconsistências nas datas.")
+        elif not justificativa.strip():
+            st.error("A justificativa é obrigatória.")
+        else:
+            novo_pedido = {
+                "colaborador": solicitante,
+                "tipo": tipo,
+                "modo": "Horas Parciais" if "Parcial" in modo_tempo else "Dias Inteiros",
+                "inicio": str(dt_inicio),
+                "fim": str(dt_fim),
+                "detalhe_tempo": detalhe_str,
+                "justificativa": justificativa,
+                "status": "Pendente"
+            }
+            salvar_novo_pedido(novo_pedido)
+            st.success("✅ Solicitação enviada com sucesso! Redirecionando para o calendário...")
+            st.balloons()
+            
+            st.session_state["agendamentos"] = carregar_dados()
+            st.rerun()
 
 # ---------------------------------------------------------
 # ABA 3: PAINEL DO GESTOR
@@ -405,7 +396,7 @@ if aba_gestor is not None:
             if st.button("Salvar Nova Senha", width='stretch'):
                 if nova_senha_input.strip() != "":
                     st.session_state["senha_gestor"] = nova_senha_input.strip()
-                    st.success("✅ Senha atualizada com sucesso!")
+                    st.success("✅ senha atualizada com sucesso!")
                 else:
                     st.error("A senha não pode estar em branco.")
 
@@ -427,7 +418,7 @@ if aba_gestor is not None:
             else:
                 st.success("🎉 Tudo em dia! Nenhuma solicitação pendente no momento.")
 
-            sub_pendentes, sub_historico = st.tabs(["⏳ Pendentes de Aprovação", "📋 Histórico Completo"])
+            sub_pendentes, sub_historico = st.tabs(["⏳ Pendentes de Aprovação", "📋 Histórico Completo & Limpeza"])
             
             with sub_pendentes:
                 pendentes = [r for r in st.session_state["agendamentos"] if str(r["status"]).strip().lower() == "pendente"]
@@ -447,7 +438,7 @@ if aba_gestor is not None:
                             st.caption(info_p)
                             st.text(f"Justificativa: {p.get('justificativa', 'Sem justificativa')}")
                             
-                            b1, b2 = st.columns(2)
+                            b1, b2, b3 = st.columns(3)
                             with b1:
                                 if st.button(f"✅ Aprovar #{p['id']}", key=f"ok_{p['id']}", width='stretch'):
                                     atualizar_status_pedido(p['id'], "Aprovado")
@@ -460,13 +451,34 @@ if aba_gestor is not None:
                                     st.warning("Solicitação rejeitada.")
                                     st.session_state["agendamentos"] = carregar_dados()
                                     st.rerun()
+                            with b3:
+                                if st.button(f"🗑️ Excluir #{p['id']}", key=f"del_{p['id']}", width='stretch'):
+                                    excluir_pedido(p['id'])
+                                    st.error(f"Solicitação #{p['id']} excluída permanentemente.")
+                                    st.session_state["agendamentos"] = carregar_dados()
+                                    st.rerun()
                 else:
                     st.info("Nenhum pedido pendente na aba de análises.")
                     
             with sub_historico:
-                st.markdown("### Registro Geral de Solicitações")
-                df_hist = pd.DataFrame(st.session_state["agendamentos"])
-                if not df_hist.empty:
+                st.markdown("### Registro Geral de Solicitações & Exclusão de Testes")
+                st.caption("Você pode visualizar o histórico ou excluir registros indesejados/testes da base.")
+                
+                todos_regs = st.session_state["agendamentos"]
+                if todos_regs:
+                    for reg in todos_regs:
+                        col_h1, col_h2 = st.columns([4, 1])
+                        with col_h1:
+                            st.text(f"ID #{reg['id']} | {reg['colaborador']} | {reg['tipo']} | De {reg['inicio']} até {reg['fim']} [{reg['status']}]")
+                        with col_h2:
+                            if st.button(f"🗑️ Apagar", key=f"del_hist_{reg['id']}", width='stretch'):
+                                excluir_pedido(reg['id'])
+                                st.warning(f"Registro #{reg['id']} apagado!")
+                                st.session_state["agendamentos"] = carregar_dados()
+                                st.rerun()
+                    
+                    st.divider()
+                    df_hist = pd.DataFrame(todos_regs)
                     st.dataframe(df_hist, width='stretch')
                     
                     csv_data = df_hist.to_csv(index=False).encode('utf-8-sig')
@@ -483,4 +495,4 @@ if aba_gestor is not None:
         elif senha_digitada != "":
             st.error("❌ Senha incorreta. Apenas o gestor autorizado possui a senha de acesso.")
         else:
-            st.info("🔒 Por favor, digite a senha para visualizar o painel gerencial.")
+            st.info("🔒 Por favor, digite a senha para visualizar o painel gerencial. (Dica: A senha inicial padrão é **1234**).")
