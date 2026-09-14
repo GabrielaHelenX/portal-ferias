@@ -2,15 +2,45 @@ import streamlit as st
 import pandas as pd
 import datetime
 import holidays
+from streamlit_gsheets import GSheetsConnection
 
 # ---------------------------------------------------------
-# 1. CONFIGURAÇÃO DA PÁGINA (Layout Profissional)
+# 1. CONFIGURAÇÃO DA PÁGINA & CONEXÃO COM GOOGLE SHEETS
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="Portal de Férias & Ausências | Ânima",
     page_icon="🌴",
     layout="wide"
 )
+
+# Estabelece a conexão com o Google Sheets configurado nos Secrets
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+def carregar_dados():
+    try:
+        # Lê a planilha do Google
+        df = conn.read(ttl=0)
+        df = df.dropna(how="all") # Remove linhas totalmente vazias
+        
+        # Converte colunas de data de volta para o formato date do Python
+        if not df.empty:
+            df["inicio"] = pd.to_datetime(df["inicio"]).dt.date
+            df["fim"] = pd.to_datetime(df["fim"]).dt.date
+            df["id"] = pd.to_numeric(df["id"], errors="coerce")
+        return df.to_dict(orient="records")
+    except Exception as e:
+        st.error(f"Erro ao conectar com a planilha do Google: {e}")
+        return []
+
+def salvar_dados(lista_agendamentos):
+    df_novo = pd.DataFrame(lista_agendamentos)
+    # Grava por cima na planilha do Google atualizando os dados
+    conn.update(data=df_novo)
+    st.cache_data.clear()
+
+# Carrega os agendamentos da nuvem do Google na sessão
+if "agendamentos" not in st.session_state:
+    st.session_state["agendamentos"] = carregar_dados()
 
 # Estilização Clean & Modern UI (Padrão Ânima)
 st.markdown("""
@@ -28,6 +58,18 @@ st.markdown("""
         margin-bottom: 12px;
     }
     
+    .alert-pendente {
+        background-color: #7F1D1D;
+        color: #FEE2E2;
+        padding: 15px;
+        border-radius: 10px;
+        border: 1px solid #B91C1C;
+        font-weight: bold;
+        margin-bottom: 20px;
+        text-align: center;
+        font-size: 16px;
+    }
+
     .holiday-badge {
         background-color: #831843;
         color: #F43F5E;
@@ -71,21 +113,6 @@ EQUIPE_DETALHES = {
 }
 EQUIPE = list(EQUIPE_DETALHES.keys())
 
-if "agendamentos" not in st.session_state:
-    st.session_state["agendamentos"] = [
-        {
-            "id": 2,
-            "colaborador": "KELVYN AMARAL CANDIDO",
-            "tipo": "Férias",
-            "modo": "Dias Inteiros",
-            "inicio": datetime.date(2026, 11, 13),
-            "fim": datetime.date(2026, 11, 27),
-            "detalhe_tempo": "15 dias",
-            "justificativa": "Férias programadas de novembro",
-            "status": "Aprovado"
-        }
-    ]
-
 def checar_regras(nome_colaborador, dt_inicio, dt_fim):
     detalhes = EQUIPE_DETALHES[nome_colaborador]
     feriados_br = holidays.BR(years=dt_inicio.year, subdiv=detalhes["estado"])
@@ -107,7 +134,7 @@ def checar_regras(nome_colaborador, dt_inicio, dt_fim):
         avisos.append(f"Feriado(s) identificado(s) no meio do período: {', '.join(feriados_no_periodo)}.")
 
     for reg in st.session_state["agendamentos"]:
-        if reg["colaborador"] != nome_colaborador and reg["status"] == "Aprovado":
+        if reg["colaborador"] != nome_colaborador and str(reg["status"]).strip().lower() == "aprovado":
             if dt_inicio <= reg["fim"] and dt_fim >= reg["inicio"]:
                 avisos.append(f"Atenção: {reg['colaborador'].split()[0]} já estará ausente neste mesmo período.")
     return erros, avisos
@@ -143,8 +170,8 @@ with aba_painel:
     st.subheader("Painel de Controle & Calendário da Equipe")
     
     col1, col2, col3 = st.columns(3)
-    total_aprovados = sum(1 for r in st.session_state["agendamentos"] if r["status"] == "Aprovado")
-    total_pendentes = sum(1 for r in st.session_state["agendamentos"] if r["status"] == "Pendente")
+    total_aprovados = sum(1 for r in st.session_state["agendamentos"] if str(r["status"]).strip().lower() == "aprovado")
+    total_pendentes = sum(1 for r in st.session_state["agendamentos"] if str(r["status"]).strip().lower() == "pendente")
     
     col1.metric("Ausências Aprovadas", total_aprovados)
     col2.metric("Pendentes de Aprovação", total_pendentes)
@@ -166,7 +193,7 @@ with aba_painel:
     st.markdown("### 📅 Linha do Tempo e Ausências da Equipe")
     st.caption("Consulte abaixo quem estará ausente para evitar conflitos de cobertura.")
     
-    agendamentos_ativos = [r for r in st.session_state["agendamentos"] if r["status"] == "Aprovado"]
+    agendamentos_ativos = [r for r in st.session_state["agendamentos"] if str(r["status"]).strip().lower() == "aprovado"]
     
     if agendamentos_ativos:
         for reg in agendamentos_ativos:
@@ -202,7 +229,7 @@ with aba_painel:
         st.info("Nenhuma ausência confirmada no momento.")
 
 # ---------------------------------------------------------
-# ABA 2: NOVA SOLICITAÇÃO (Com seletor de horas garantido)
+# ABA 2: NOVA SOLICITAÇÃO
 # ---------------------------------------------------------
 with aba_solicitar:
     st.subheader("Registrar Nova Solicitação de Ausência")
@@ -238,7 +265,6 @@ with aba_solicitar:
         else:
             st.error("❌ A data de término deve ser igual ou posterior à data de início.")
     else:
-        # AQUI GARANTIMOS O RELÓGINHO DE HORAS PARCIAIS
         st.markdown("---")
         st.markdown("🕒 **Defina o período da ausência parcial neste dia:**")
         
@@ -280,8 +306,9 @@ with aba_solicitar:
         elif not justificativa.strip():
             st.error("A justificativa é obrigatória.")
         else:
+            novo_id = int(max([r["id"] for r in st.session_state["agendamentos"]], default=0)) + 1
             novo_pedido = {
-                "id": len(st.session_state["agendamentos"]) + 1,
+                "id": novo_id,
                 "colaborador": solicitante,
                 "tipo": tipo,
                 "modo": "Horas Parciais" if "Parcial" in modo_tempo else "Dias Inteiros",
@@ -292,11 +319,13 @@ with aba_solicitar:
                 "status": "Pendente"
             }
             st.session_state["agendamentos"].append(novo_pedido)
+            salvar_dados(st.session_state["agendamentos"])
             st.balloons()
-            st.success("Solicitação enviada com sucesso! O gestor foi notificado.")
+            st.success("Solicitação enviada e salva na nuvem com sucesso!")
+            st.rerun()
 
 # ---------------------------------------------------------
-# ABA 3: PAINEL DO GESTOR COM SENHA
+# ABA 3: PAINEL DO GESTOR COM GOOGLE SHEETS
 # ---------------------------------------------------------
 with aba_gestor:
     st.subheader("Área Restrita do Gestor")
@@ -307,7 +336,7 @@ with aba_gestor:
         if st.button("Salvar Nova Senha"):
             if nova_senha_input.strip() != "":
                 st.session_state["senha_gestor"] = nova_senha_input.strip()
-                st.success("✅ Senha atualizada com sucesso! Use esta nova senha para entrar.")
+                st.success("✅ Senha atualizada com sucesso!")
             else:
                 st.error("A senha não pode estar em branco.")
 
@@ -318,10 +347,21 @@ with aba_gestor:
         st.success("✅ Acesso autorizado!")
         st.markdown(f"### Painel Gerencial de {GESTOR_OFICIAL}")
         
+        total_pendentes_gestor = sum(1 for r in st.session_state["agendamentos"] if str(r["status"]).strip().lower() == "pendente")
+        
+        if total_pendentes_gestor > 0:
+            st.markdown(f"""
+                <div class="alert-pendente">
+                    🚨 ATENÇÃO: Existem <b>{total_pendentes_gestor}</b> solicitação(ões) aguardando sua análise e aprovação abaixo!
+                </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.success("🎉 Tudo em dia! Nenhuma solicitação pendente no momento.")
+
         sub_pendentes, sub_historico = st.tabs(["⏳ Pendentes de Aprovação", "📋 Histórico Completo"])
         
         with sub_pendentes:
-            pendentes = [r for r in st.session_state["agendamentos"] if r["status"] == "Pendente"]
+            pendentes = [r for r in st.session_state["agendamentos"] if str(r["status"]).strip().lower() == "pendente"]
             
             if pendentes:
                 for p in pendentes:
@@ -341,16 +381,22 @@ with aba_gestor:
                         b1, b2 = st.columns(2)
                         with b1:
                             if st.button(f"✅ Aprovar #{p['id']}", key=f"ok_{p['id']}", use_container_width=True):
-                                p["status"] = "Aprovado"
-                                st.success(f"Solicitação de {p['colaborador'].split()[0]} aprovada!")
+                                for item in st.session_state["agendamentos"]:
+                                    if item["id"] == p["id"]:
+                                        item["status"] = "Aprovado"
+                                salvar_dados(st.session_state["agendamentos"])
+                                st.success(f"Solicitação de {p['colaborador'].split()[0]} aprovada e salva na nuvem!")
                                 st.rerun()
                         with b2:
                             if st.button(f"❌ Rejeitar #{p['id']}", key=f"no_{p['id']}", use_container_width=True):
-                                p["status"] = "Rejeitado"
-                                st.warning("Solicitação rejeitada.")
+                                for item in st.session_state["agendamentos"]:
+                                    if item["id"] == p["id"]:
+                                        item["status"] = "Rejeitado"
+                                salvar_dados(st.session_state["agendamentos"])
+                                st.warning("Solicitação rejeitada e atualizada na planilha.")
                                 st.rerun()
             else:
-                st.success("🎉 Nenhuma solicitação pendente no momento. Tudo em dia!")
+                st.info("Nenhum pedido pendente na aba de análises.")
                 
         with sub_historico:
             st.markdown("### Registro Geral de Solicitações")
@@ -363,4 +409,4 @@ with aba_gestor:
     elif senha_digitada != "":
         st.error("❌ Senha incorreta. Apenas o gestor autorizado possui a senha de acesso.")
     else:
-        st.info("🔒 Por favor, digite a senha para visualizar o painel gerencial. (Dica: A senha inicial padrão é **1234**, e você pode alterá-la na caixinha acima a qualquer momento).")
+        st.info("🔒 Por favor, digite a senha para visualizar o painel gerencial. (Dica: A senha inicial padrão é **1234**).")
