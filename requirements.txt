@@ -1,4 +1,5 @@
 streamlit
 holidays
 pandas
-st-gsheets-connection
+gspread
+google-auth
