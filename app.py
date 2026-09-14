@@ -2,11 +2,9 @@ import streamlit as st
 import pandas as pd
 import datetime
 import holidays
-import gspread
-from google.oauth2.service_account import Credentials
 
 # ---------------------------------------------------------
-# 1. CONFIGURAÇÃO DA PÁGINA & CONEXÃO COM GOOGLE SHEETS
+# 1. CONFIGURAÇÃO DA PÁGINA & BANCO DE DADOS LOCAL NA NUVEM
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="Portal de Férias & Ausências | Ânima",
@@ -14,64 +12,75 @@ st.set_page_config(
     layout="wide"
 )
 
-def conectar_gsheets():
-    try:
-        scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-        if "gcp_service_account" in st.secrets:
-            creds_dict = dict(st.secrets["gcp_service_account"])
-            creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-            client = gspread.authorize(creds)
-            sheet_url = st.secrets["gsheets"]["spreadsheet"]
-            sheet = client.open_by_url(sheet_url).sheet1
-            return sheet
-    except Exception as e:
-        st.error(f"Erro detalhado de conexão com a planilha: {e}")
-        return None
-    return None
+# Conexão nativa do Streamlit com banco SQLite (cria um arquivo .db local nos bastidores que nunca apaga)
+conn = st.connection("sql", type="sql")
+
+# Cria a tabela de agendamentos automaticamente se ela não existir
+conn.query("""
+    CREATE TABLE IF NOT EXISTS agendamentos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        colaborador TEXT,
+        tipo TEXT,
+        modo TEXT,
+        inicio TEXT,
+        fim TEXT,
+        detalhe_tempo TEXT,
+        justificativa TEXT,
+        status TEXT
+    );
+""", ttl=0)
 
 def carregar_dados():
-    sheet = conectar_gsheets()
-    if sheet:
-        try:
-            dados = sheet.get_all_records()
-            df = pd.DataFrame(dados)
-            if not df.empty and "id" in df.columns:
-                df["inicio"] = pd.to_datetime(df["inicio"]).dt.date
-                df["fim"] = pd.to_datetime(df["fim"]).dt.date
-                df["id"] = pd.to_numeric(df["id"], errors="coerce")
-                return df.to_dict(orient="records")
-        except Exception as e:
-            st.warning(f"A planilha está vazia ou com formato diferente. Usando padrão. Detalhe: {e}")
-    
-    return [
-        {
-            "id": 2,
-            "colaborador": "KELVYN AMARAL CANDIDO",
-            "tipo": "Férias",
-            "modo": "Dias Inteiros",
-            "inicio": datetime.date(2026, 11, 13),
-            "fim": datetime.date(2026, 11, 27),
-            "detalhe_tempo": "15 dias",
-            "justificativa": "Férias programadas de novembro",
-            "status": "Aprovado"
-        }
-    ]
+    try:
+        df = conn.query("SELECT * FROM agendamentos;", ttl=0)
+        if df.empty:
+            # Se a tabela estiver vazia, insere o registro inicial padrão do Kelvyn
+            conn.query("""
+                INSERT INTO agendamentos (colaborador, tipo, modo, inicio, fim, detalhe_tempo, justificativa, status)
+                VALUES ('KELVYN AMARAL CANDIDO', 'Férias', 'Dias Inteiros', '2026-11-13', '2026-11-27', '15 dias', 'Férias programadas de novembro', 'Aprovado');
+            """, ttl=0)
+            df = conn.query("SELECT * FROM agendamentos;", ttl=0)
+        
+        # Converte as colunas de texto de data de volta para o formato de data do Python
+        if not df.empty:
+            df["inicio"] = pd.to_datetime(df["inicio"]).dt.date
+            df["fim"] = pd.to_datetime(df["fim"]).dt.date
+            df["id"] = pd.to_numeric(df["id"], errors="coerce")
+        return df.to_dict(orient="records")
+    except Exception as e:
+        st.error(f"Erro ao carregar dados: {e}")
+        return []
 
-def salvar_dados(lista_agendamentos):
-    sheet = conectar_gsheets()
-    if sheet:
-        try:
-            sheet.clear()
-            df_novo = pd.DataFrame(lista_agendamentos)
-            df_novo["inicio"] = pd.to_datetime(df_novo["inicio"]).dt.strftime('%Y-%m-%d')
-            df_novo["fim"] = pd.to_datetime(df_novo["fim"]).dt.strftime('%Y-%m-%d')
-            sheet.update([df_novo.columns.values.tolist()] + df_novo.values.tolist())
-            st.success("✅ Salvo com sucesso no Google Sheets!")
-        except Exception as e:
-            st.error(f"❌ Erro crítico ao salvar na nuvem do Google: {e}")
+def salvar_novo_pedido(pedido):
+    try:
+        conn.query(f"""
+            INSERT INTO agendamentos (colaborador, tipo, modo, inicio, fim, detalhe_tempo, justificativa, status)
+            VALUES (
+                '{pedido["colaborador"]}', 
+                '{pedido["tipo"]}', 
+                '{pedido["modo"]}', 
+                '{pedido["inicio"]}', 
+                '{pedido["fim"]}', 
+                '{pedido["detalhe_tempo"]}', 
+                '{pedido["justificativa"]}', 
+                '{pedido["status"]}'
+            );
+        """, ttl=0)
+    except Exception as e:
+        st.error(f"Erro ao salvar pedido: {e}")
 
-if "agendamentos" not in st.session_state:
-    st.session_state["agendamentos"] = carregar_dados()
+def atualizar_status_pedido(id_pedido, novo_status):
+    try:
+        conn.query(f"""
+            UPDATE agendamentos 
+            SET status = '{novo_status}' 
+            WHERE id = {id_pedido};
+        """, ttl=0)
+    except Exception as e:
+        st.error(f"Erro ao atualizar status: {e}")
+
+# Carrega os dados para a sessão
+st.session_state["agendamentos"] = carregar_dados()
 
 # Estilização Clean & Modern UI (Padrão Ânima)
 st.markdown("""
@@ -341,22 +350,21 @@ with aba_solicitar:
         elif not justificativa.strip():
             st.error("A justificativa é obrigatória.")
         else:
-            novo_id = int(max([r["id"] for r in st.session_state["agendamentos"]], default=0)) + 1
             novo_pedido = {
-                "id": novo_id,
                 "colaborador": solicitante,
                 "tipo": tipo,
                 "modo": "Horas Parciais" if "Parcial" in modo_tempo else "Dias Inteiros",
-                "inicio": dt_inicio,
-                "fim": dt_fim,
+                "inicio": str(dt_inicio),
+                "fim": str(str(dt_fim)),
                 "detalhe_tempo": detalhe_str,
                 "justificativa": justificativa,
                 "status": "Pendente"
             }
-            st.session_state["agendamentos"].append(novo_pedido)
-            salvar_dados(st.session_state["agendamentos"])
+            # Ajuste correto para string na data fim
+            novo_pedido["fim"] = str(dt_fim)
+            salvar_novo_pedido(novo_pedido)
             st.balloons()
-            st.success("Solicitação enviada e salva na nuvem com sucesso!")
+            st.success("Solicitação enviada e salva com sucesso!")
             st.rerun()
 
 # ---------------------------------------------------------
@@ -417,19 +425,13 @@ if aba_gestor is not None:
                             b1, b2 = st.columns(2)
                             with b1:
                                 if st.button(f"✅ Aprovar #{p['id']}", key=f"ok_{p['id']}", width='stretch'):
-                                    for item in st.session_state["agendamentos"]:
-                                        if item["id"] == p["id"]:
-                                            item["status"] = "Aprovado"
-                                    salvar_dados(st.session_state["agendamentos"])
-                                    st.success(f"Solicitação de {p['colaborador'].split()[0]} aprovada e salva na nuvem!")
+                                    atualizar_status_pedido(p['id'], "Aprovado")
+                                    st.success(f"Solicitação de {p['colaborador'].split()[0]} aprovada com sucesso!")
                                     st.rerun()
                             with b2:
                                 if st.button(f"❌ Rejeitar #{p['id']}", key=f"no_{p['id']}", width='stretch'):
-                                    for item in st.session_state["agendamentos"]:
-                                        if item["id"] == p["id"]:
-                                            item["status"] = "Rejeitado"
-                                    salvar_dados(st.session_state["agendamentos"])
-                                    st.warning("Solicitação rejeitada e atualizada na planilha.")
+                                    atualizar_status_pedido(p['id'], "Rejeitado")
+                                    st.warning("Solicitação rejeitada.")
                                     st.rerun()
                 else:
                     st.info("Nenhum pedido pendente na aba de análises.")
@@ -445,4 +447,4 @@ if aba_gestor is not None:
         elif senha_digitada != "":
             st.error("❌ Senha incorreta. Apenas o gestor autorizado possui a senha de acesso.")
         else:
-            st.info("🔒 Por favor, digite a senha para visualizar o painel gerencial. ")
+            st.info("🔒 Por favor, digite a senha para visualizar o painel gerencial. (Dica: A senha inicial padrão é **1234**).")
