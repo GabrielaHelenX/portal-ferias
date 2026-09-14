@@ -16,7 +16,7 @@ st.set_page_config(
 # Função para conectar ao banco de dados SQLite local com UTF-8 garantido
 def obter_conexao():
     conn = sqlite3.connect("banco_ferias.db", check_same_thread=False)
-    conn.text_factory = str  # Garante leitura correta de acentos e caracteres especiais
+    conn.text_factory = str
     return conn
 
 # Cria a tabela automaticamente se não existir
@@ -47,7 +47,6 @@ def carregar_dados():
     conn.close()
     
     if df.empty:
-        # Insere o registro padrão inicial se a tabela estiver totalmente vazia
         conn = obter_conexao()
         cursor = conn.cursor()
         cursor.execute("""
@@ -298,88 +297,100 @@ with aba_solicitar:
     solicitante = perfil_usuario
     st.write(f"✍️ Solicitante: **{solicitante}**")
 
-    tipo = st.radio("Modalidade", ["Férias", "Banco de Horas / Abono"], horizontal=True)
-    modo_tempo = st.radio("Duração da Ausência", ["Dias Inteiros (Início e Fim)", "Horário Específico (Parcial)"], horizontal=True)
-    
-    dt_inicio = datetime.date.today()
-    dt_fim = datetime.date.today()
-    detalhe_str = ""
-    
-    if modo_tempo == "Dias Inteiros (Início e Fim)":
-        c1, c2 = st.columns(2)
-        with c1:
-            dt_inicio = st.date_input("Data de Início", datetime.date.today())
-        with c2:
-            dt_fim = st.date_input("Data de Término", datetime.date.today() + datetime.timedelta(days=5))
-        
-        if dt_fim >= dt_inicio:
-            qnt_dias = (dt_fim - dt_inicio).days + 1
-        else:
-            qnt_dias = 0
-            
-        retorno = dt_fim + datetime.timedelta(days=1)
-        detalhe_str = f"{qnt_dias} dias"
-        
-        if qnt_dias > 0:
-            st.markdown(f"💡 **Resumo Dinâmico:** De **{dt_inicio.strftime('%d/%m/%Y')}** até **{dt_fim.strftime('%d/%m/%Y')}** (**{qnt_dias} dias** no total). Retorno em: {retorno.strftime('%d/%m/%Y')}")
-        else:
-            st.error("❌ A data de término deve ser igual ou posterior à data de início.")
+    # VERIFICAÇÃO ANTIDUPLICIDADE: Checa se já existe pedido Pendente ou Aprovado para este colaborador
+    pedidos_existentes_colab = [
+        r for r in st.session_state["agendamentos"] 
+        if r["colaborador"] == solicitante and str(r["status"]).strip().lower() in ["pendente", "aprovado"]
+    ]
+
+    if pedidos_existentes_colab:
+        st.warning(f"⚠️ **Atenção:** Você ({solicitante.split()[0]}) já possui uma solicitação registrada com status **{pedidos_existentes_colab[-1]['status']}** em andamento. Novas solicitações estão temporariamente bloqueadas para evitar duplicidade.")
     else:
-        st.markdown("---")
-        st.markdown("🕒 **Defina o período da ausência parcial neste dia:**")
+        tipo = st.radio("Modalidade", ["Férias", "Banco de Horas / Abono"], horizontal=True)
+        modo_tempo = st.radio("Duração da Ausência", ["Dias Inteiros (Início e Fim)", "Horário Específico (Parcial)"], horizontal=True)
         
-        dt_inicio = st.date_input("Data da Ausência Parcial", datetime.date.today())
-        dt_fim = dt_inicio
+        dt_inicio = datetime.date.today()
+        dt_fim = datetime.date.today()
+        detalhe_str = ""
         
-        c_h1, c_h2 = st.columns(2)
-        with c_h1:
-            hora_inicio = st.time_input("Horário de Saída / Início", datetime.time(9, 0))
-        with c_h2:
-            hora_fim = st.time_input("Horário de Retorno / Término", datetime.time(12, 0))
-        
-        detalhe_str = f"Das {hora_inicio.strftime('%H:%M')} às {hora_fim.strftime('%H:%M')}"
-        st.markdown(f"💡 **Resumo do Horário:** Ausente no dia **{dt_inicio.strftime('%d/%m/%Y')}** ({detalhe_str})")
-        st.markdown("---")
-
-    justificativa = st.text_area("Justificativa / Motivo", placeholder="Ex: Consulta médica, compromisso pessoal, descanso...")
-    
-    erros, avisos = checar_regras(solicitante, dt_inicio, dt_fim)
-    bloqueio = False
-    
-    if modo_tempo == "Dias Inteiros (Início e Fim)" and dt_fim < dt_inicio:
-        bloqueio = True
-        erros.append("A data de término não pode ser anterior à data de início.")
-
-    if erros:
-        bloqueio = True
-        for e in erros:
-            st.error(f"❌ {e}")
-    if avisos:
-        for a in avisos:
-            st.warning(f"⚠️ {a}")
+        if modo_tempo == "Dias Inteiros (Início e Fim)":
+            c1, c2 = st.columns(2)
+            with c1:
+                dt_inicio = st.date_input("Data de Início", datetime.date.today())
+            with c2:
+                dt_fim = st.date_input("Data de Término", datetime.date.today() + datetime.timedelta(days=5))
             
-    enviar = st.button("🚀 Enviar Solicitação para Aprovação", width='stretch')
-    
-    if enviar:
-        if bloqueio:
-            st.error("Envio bloqueado devido a inconsistências nas datas.")
-        elif not justificativa.strip():
-            st.error("A justificativa é obrigatória.")
+            if dt_fim >= dt_inicio:
+                qnt_dias = (dt_fim - dt_inicio).days + 1
+            else:
+                qnt_dias = 0
+                
+            retorno = dt_fim + datetime.timedelta(days=1)
+            detalhe_str = f"{qnt_dias} dias"
+            
+            if qnt_dias > 0:
+                st.markdown(f"💡 **Resumo Dinâmico:** De **{dt_inicio.strftime('%d/%m/%Y')}** até **{dt_fim.strftime('%d/%m/%Y')}** (**{qnt_dias} dias** no total). Retorno em: {retorno.strftime('%d/%m/%Y')}")
+            else:
+                st.error("❌ A data de término deve ser igual ou posterior à data de início.")
         else:
-            novo_pedido = {
-                "colaborador": solicitante,
-                "tipo": tipo,
-                "modo": "Horas Parciais" if "Parcial" in modo_tempo else "Dias Inteiros",
-                "inicio": str(dt_inicio),
-                "fim": str(dt_fim),
-                "detalhe_tempo": detalhe_str,
-                "justificativa": justificativa,
-                "status": "Pendente"
-            }
-            salvar_novo_pedido(novo_pedido)
-            st.balloons()
-            st.success("Solicitação enviada e salva com sucesso!")
-            st.rerun()
+            st.markdown("---")
+            st.markdown("🕒 **Defina o período da ausência parcial neste dia:**")
+            
+            dt_inicio = st.date_input("Data da Ausência Parcial", datetime.date.today())
+            dt_fim = dt_inicio
+            
+            c_h1, c_h2 = st.columns(2)
+            with c_h1:
+                hora_inicio = st.time_input("Horário de Saída / Início", datetime.time(9, 0))
+            with c_h2:
+                hora_fim = st.time_input("Horário de Retorno / Término", datetime.time(12, 0))
+            
+            detalhe_str = f"Das {hora_inicio.strftime('%H:%M')} às {hora_fim.strftime('%H:%M')}"
+            st.markdown(f"💡 **Resumo do Horário:** Ausente no dia **{dt_inicio.strftime('%d/%m/%Y')}** ({detalhe_str})")
+            st.markdown("---")
+
+        justificativa = st.text_area("Justificativa / Motivo", placeholder="Ex: Consulta médica, compromisso pessoal, descanso...")
+        
+        erros, avisos = checar_regras(solicitante, dt_inicio, dt_fim)
+        bloqueio = False
+        
+        if modo_tempo == "Dias Inteiros (Início e Fim)" and dt_fim < dt_inicio:
+            bloqueio = True
+            erros.append("A data de término não pode ser anterior à data de início.")
+
+        if erros:
+            bloqueio = True
+            for e in erros:
+                st.error(f"❌ {e}")
+        if avisos:
+            for a in avisos:
+                st.warning(f"⚠️ {a}")
+                
+        enviar = st.button("🚀 Enviar Solicitação para Aprovação", width='stretch')
+        
+        if enviar:
+            if bloqueio:
+                st.error("Envio bloqueado devido a inconsistências nas datas.")
+            elif not justificativa.strip():
+                st.error("A justificativa é obrigatória.")
+            else:
+                novo_pedido = {
+                    "colaborador": solicitante,
+                    "tipo": tipo,
+                    "modo": "Horas Parciais" if "Parcial" in modo_tempo else "Dias Inteiros",
+                    "inicio": str(dt_inicio),
+                    "fim": str(dt_fim),
+                    "detalhe_tempo": detalhe_str,
+                    "justificativa": justificativa,
+                    "status": "Pendente"
+                }
+                salvar_novo_pedido(novo_pedido)
+                st.success("✅ Solicitação enviada com sucesso! Redirecionando para o calendário...")
+                st.balloons()
+                
+                # RECARREGA OS DADOS E REDIRECIONA AUTOMATICAMENTE PARA A PÁGINA INICIAL (ABA 1)
+                st.session_state["agendamentos"] = carregar_dados()
+                st.rerun()
 
 # ---------------------------------------------------------
 # ABA 3: PAINEL DO GESTOR
@@ -441,11 +452,13 @@ if aba_gestor is not None:
                                 if st.button(f"✅ Aprovar #{p['id']}", key=f"ok_{p['id']}", width='stretch'):
                                     atualizar_status_pedido(p['id'], "Aprovado")
                                     st.success(f"Solicitação de {p['colaborador'].split()[0]} aprovada com sucesso!")
+                                    st.session_state["agendamentos"] = carregar_dados()
                                     st.rerun()
                             with b2:
                                 if st.button(f"❌ Rejeitar #{p['id']}", key=f"no_{p['id']}", width='stretch'):
                                     atualizar_status_pedido(p['id'], "Rejeitado")
                                     st.warning("Solicitação rejeitada.")
+                                    st.session_state["agendamentos"] = carregar_dados()
                                     st.rerun()
                 else:
                     st.info("Nenhum pedido pendente na aba de análises.")
@@ -456,7 +469,6 @@ if aba_gestor is not None:
                 if not df_hist.empty:
                     st.dataframe(df_hist, width='stretch')
                     
-                    # BOTÃO DE DOWNLOAD DO HISTÓRICO COM UTF-8 CORRETO NO EXCEL/CSV
                     csv_data = df_hist.to_csv(index=False).encode('utf-8-sig')
                     st.download_button(
                         label="📥 Baixar Histórico Completo (Planilha CSV / Excel)",
