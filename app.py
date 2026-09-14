@@ -14,7 +14,6 @@ st.set_page_config(
 )
 
 def obter_conexao():
-    # Usando um novo nome de arquivo para limpar todos os dados de teste antigos
     conn = sqlite3.connect("banco_ferias_v2.db", check_same_thread=False)
     conn.text_factory = str
     return conn
@@ -100,15 +99,29 @@ def excluir_pedido(id_pedido):
     conn.commit()
     conn.close()
 
-# Carrega os dados para a sessão
 st.session_state["agendamentos"] = carregar_dados()
 
-# Estilização Clean & Modern UI (Padrão Ânima)
+# Estilização Global Forçada (Dark Mode Perfeito & Limpo)
 st.markdown("""
     <style>
     .stApp { background-color: #0F172A; color: #F8FAFC; }
+    
+    /* Força a barra lateral a ficar escura com textos claros */
+    [data-testid="stSidebar"] {
+        background-color: #1E1B4B;
+        color: #F8FAFC;
+    }
+    [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stMarkdown, [data-testid="stSidebar"] span {
+        color: #F8FAFC !important;
+    }
+
     h1 { color: #F3E8FF !important; font-weight: 800; font-size: 1.8rem !important; }
     h2, h3 { color: #E9D5FF !important; font-weight: 700; }
+    
+    /* Textos de inputs e labels gerais */
+    label, p, span {
+        color: #E2E8F0;
+    }
     
     .anima-card {
         background-color: #1E1B4B;
