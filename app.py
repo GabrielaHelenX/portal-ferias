@@ -355,13 +355,11 @@ with aba_solicitar:
                 "tipo": tipo,
                 "modo": "Horas Parciais" if "Parcial" in modo_tempo else "Dias Inteiros",
                 "inicio": str(dt_inicio),
-                "fim": str(str(dt_fim)),
+                "fim": str(dt_fim),
                 "detalhe_tempo": detalhe_str,
                 "justificativa": justificativa,
                 "status": "Pendente"
             }
-            # Ajuste correto para string na data fim
-            novo_pedido["fim"] = str(dt_fim)
             salvar_novo_pedido(novo_pedido)
             st.balloons()
             st.success("Solicitação enviada e salva com sucesso!")
@@ -441,10 +439,20 @@ if aba_gestor is not None:
                 df_hist = pd.DataFrame(st.session_state["agendamentos"])
                 if not df_hist.empty:
                     st.dataframe(df_hist, width='stretch')
+                    
+                    # BOTÃO DE DOWNLOAD DO HISTÓRICO EM PLANILHA (CSV)
+                    csv_data = df_hist.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        label="📥 Baixar Histórico Completo (Planilha CSV / Excel)",
+                        data=csv_data,
+                        file_name="historico_ferias_anima.csv",
+                        mime="text/csv",
+                        width='stretch'
+                    )
                 else:
                     st.info("Nenhum registro encontrado.")
                     
         elif senha_digitada != "":
             st.error("❌ Senha incorreta. Apenas o gestor autorizado possui a senha de acesso.")
         else:
-            st.info("🔒 Por favor, digite a senha para visualizar o painel gerencial. (Dica: A senha inicial padrão é **1234**).")
+            st.info("🔒 Por favor, digite a senha para visualizar o painel gerencial.")
