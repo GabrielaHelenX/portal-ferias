@@ -18,11 +18,8 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 def carregar_dados():
     try:
-        # Lê a planilha do Google
         df = conn.read(ttl=0)
-        df = df.dropna(how="all") # Remove linhas totalmente vazias
-        
-        # Converte colunas de data de volta para o formato date do Python
+        df = df.dropna(how="all")
         if not df.empty:
             df["inicio"] = pd.to_datetime(df["inicio"]).dt.date
             df["fim"] = pd.to_datetime(df["fim"]).dt.date
@@ -34,11 +31,9 @@ def carregar_dados():
 
 def salvar_dados(lista_agendamentos):
     df_novo = pd.DataFrame(lista_agendamentos)
-    # Grava por cima na planilha do Google atualizando os dados
     conn.update(data=df_novo)
     st.cache_data.clear()
 
-# Carrega os agendamentos da nuvem do Google na sessão
 if "agendamentos" not in st.session_state:
     st.session_state["agendamentos"] = carregar_dados()
 
@@ -157,11 +152,19 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("📌 **Regras & Feriados por Estado:**\n- Danilo: SP\n- Erika & Kelvyn: MG\n- Gabriela & Joyce: BA\n- Bloqueio automático de início em feriados e fins de semana.")
 
-aba_painel, aba_solicitar, aba_gestor = st.tabs([
-    "📊 Calendário & Feriados", 
-    "➕ Nova Solicitação", 
-    f"⚙️ Painel do Gestor 🔒"
-])
+# Trava dinâmica das abas: Se for o Danilo, exibe a aba do gestor. Senão, mostra apenas as abas comuns para a equipe.
+if perfil_usuario == GESTOR_OFICIAL:
+    aba_painel, aba_solicitar, aba_gestor = st.tabs([
+        "📊 Calendário & Feriados", 
+        "➕ Nova Solicitação", 
+        f"⚙️ Painel do Gestor 🔒"
+    ])
+else:
+    aba_painel, aba_solicitar = st.tabs([
+        "📊 Calendário & Feriados", 
+        "➕ Nova Solicitação"
+    ])
+    aba_gestor = None  # Garante que analistas não tenham acesso à aba restrita
 
 # ---------------------------------------------------------
 # ABA 1: CALENDÁRIO, EQUIPE E FERIADOS DESTACADOS
@@ -325,88 +328,89 @@ with aba_solicitar:
             st.rerun()
 
 # ---------------------------------------------------------
-# ABA 3: PAINEL DO GESTOR COM GOOGLE SHEETS
+# ABA 3: PAINEL DO GESTOR (Exclusivo para o Danilo)
 # ---------------------------------------------------------
-with aba_gestor:
-    st.subheader("Área Restrita do Gestor")
-    st.caption("Insira a senha de acesso para gerenciar as aprovações da equipe.")
-    
-    with st.expander("🔑 Configurar ou Alterar Senha de Acesso (Gestor)", expanded=False):
-        nova_senha_input = st.text_input("Definir Nova Senha para o Painel", type="password", placeholder="Digite a nova senha...")
-        if st.button("Salvar Nova Senha"):
-            if nova_senha_input.strip() != "":
-                st.session_state["senha_gestor"] = nova_senha_input.strip()
-                st.success("✅ Senha atualizada com sucesso!")
-            else:
-                st.error("A senha não pode estar em branco.")
+if aba_gestor is not None:
+    with aba_gestor:
+        st.subheader("Área Restrita do Gestor")
+        st.caption("Insira a senha de acesso para gerenciar as aprovações da equipe.")
+        
+        with st.expander("🔑 Configurar ou Alterar Senha de Acesso (Gestor)", expanded=False):
+            nova_senha_input = st.text_input("Definir Nova Senha para o Painel", type="password", placeholder="Digite a nova senha...")
+            if st.button("Salvar Nova Senha"):
+                if nova_senha_input.strip() != "":
+                    st.session_state["senha_gestor"] = nova_senha_input.strip()
+                    st.success("✅ Senha atualizada com sucesso!")
+                else:
+                    st.error("A senha não pode estar em branco.")
 
-    st.markdown("---")
-    senha_digitada = st.text_input("Digite a Senha de Acesso", type="password", placeholder="Insira a senha do gestor...")
-    
-    if senha_digitada == st.session_state["senha_gestor"]:
-        st.success("✅ Acesso autorizado!")
-        st.markdown(f"### Painel Gerencial de {GESTOR_OFICIAL}")
+        st.markdown("---")
+        senha_digitada = st.text_input("Digite a Senha de Acesso", type="password", placeholder="Insira a senha do gestor...")
         
-        total_pendentes_gestor = sum(1 for r in st.session_state["agendamentos"] if str(r["status"]).strip().lower() == "pendente")
-        
-        if total_pendentes_gestor > 0:
-            st.markdown(f"""
-                <div class="alert-pendente">
-                    🚨 ATENÇÃO: Existem <b>{total_pendentes_gestor}</b> solicitação(ões) aguardando sua análise e aprovação abaixo!
-                </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.success("🎉 Tudo em dia! Nenhuma solicitação pendente no momento.")
-
-        sub_pendentes, sub_historico = st.tabs(["⏳ Pendentes de Aprovação", "📋 Histórico Completo"])
-        
-        with sub_pendentes:
-            pendentes = [r for r in st.session_state["agendamentos"] if str(r["status"]).strip().lower() == "pendente"]
+        if senha_digitada == st.session_state["senha_gestor"]:
+            st.success("✅ Acesso autorizado!")
+            st.markdown(f"### Painel Gerencial de {GESTOR_OFICIAL}")
             
-            if pendentes:
-                for p in pendentes:
-                    p_modo = p.get("modo", "Dias Inteiros")
-                    p_detalhe = p.get("detalhe_tempo", "")
-                    
-                    with st.container(border=True):
-                        if p_modo == "Horas Parciais":
-                            info_p = f"⏰ Horário Parcial: {p_detalhe} em {p['inicio'].strftime('%d/%m/%Y')}"
-                        else:
-                            info_p = f"📅 Período: De {p['inicio'].strftime('%d/%m/%Y')} até {p['fim'].strftime('%d/%m/%Y')} ({p_detalhe})"
+            total_pendentes_gestor = sum(1 for r in st.session_state["agendamentos"] if str(r["status"]).strip().lower() == "pendente")
+            
+            if total_pendentes_gestor > 0:
+                st.markdown(f"""
+                    <div class="alert-pendente">
+                        🚨 ATENÇÃO: Existem <b>{total_pendentes_gestor}</b> solicitação(ões) aguardando sua análise e aprovação abaixo!
+                    </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.success("🎉 Tudo em dia! Nenhuma solicitação pendente no momento.")
 
-                        st.markdown(f"**{p['colaborador']}** — 📌 *{p['tipo']}*")
-                        st.caption(info_p)
-                        st.text(f"Justificativa: {p.get('justificativa', 'Sem justificativa')}")
+            sub_pendentes, sub_historico = st.tabs(["⏳ Pendentes de Aprovação", "📋 Histórico Completo"])
+            
+            with sub_pendentes:
+                pendentes = [r for r in st.session_state["agendamentos"] if str(r["status"]).strip().lower() == "pendente"]
+                
+                if pendentes:
+                    for p in pendentes:
+                        p_modo = p.get("modo", "Dias Inteiros")
+                        p_detalhe = p.get("detalhe_tempo", "")
                         
-                        b1, b2 = st.columns(2)
-                        with b1:
-                            if st.button(f"✅ Aprovar #{p['id']}", key=f"ok_{p['id']}", use_container_width=True):
-                                for item in st.session_state["agendamentos"]:
-                                    if item["id"] == p["id"]:
-                                        item["status"] = "Aprovado"
-                                salvar_dados(st.session_state["agendamentos"])
-                                st.success(f"Solicitação de {p['colaborador'].split()[0]} aprovada e salva na nuvem!")
-                                st.rerun()
-                        with b2:
-                            if st.button(f"❌ Rejeitar #{p['id']}", key=f"no_{p['id']}", use_container_width=True):
-                                for item in st.session_state["agendamentos"]:
-                                    if item["id"] == p["id"]:
-                                        item["status"] = "Rejeitado"
-                                salvar_dados(st.session_state["agendamentos"])
-                                st.warning("Solicitação rejeitada e atualizada na planilha.")
-                                st.rerun()
-            else:
-                st.info("Nenhum pedido pendente na aba de análises.")
-                
-        with sub_historico:
-            st.markdown("### Registro Geral de Solicitações")
-            df_hist = pd.DataFrame(st.session_state["agendamentos"])
-            if not df_hist.empty:
-                st.dataframe(df_hist, use_container_width=True)
-            else:
-                st.info("Nenhum registro encontrado.")
-                
-    elif senha_digitada != "":
-        st.error("❌ Senha incorreta. Apenas o gestor autorizado possui a senha de acesso.")
-    else:
-        st.info("🔒 Por favor, digite a senha para visualizar o painel gerencial. (Dica: A senha inicial padrão é **1234**).")
+                        with st.container(border=True):
+                            if p_modo == "Horas Parciais":
+                                info_p = f"⏰ Horário Parcial: {p_detalhe} em {p['inicio'].strftime('%d/%m/%Y')}"
+                            else:
+                                info_p = f"📅 Período: De {p['inicio'].strftime('%d/%m/%Y')} até {p['fim'].strftime('%d/%m/%Y')} ({p_detalhe})"
+
+                            st.markdown(f"**{p['colaborador']}** — 📌 *{p['tipo']}*")
+                            st.caption(info_p)
+                            st.text(f"Justificativa: {p.get('justificativa', 'Sem justificativa')}")
+                            
+                            b1, b2 = st.columns(2)
+                            with b1:
+                                if st.button(f"✅ Aprovar #{p['id']}", key=f"ok_{p['id']}", use_container_width=True):
+                                    for item in st.session_state["agendamentos"]:
+                                        if item["id"] == p["id"]:
+                                            item["status"] = "Aprovado"
+                                    salvar_dados(st.session_state["agendamentos"])
+                                    st.success(f"Solicitação de {p['colaborador'].split()[0]} aprovada e salva na nuvem!")
+                                    st.rerun()
+                            with b2:
+                                if st.button(f"❌ Rejeitar #{p['id']}", key=f"no_{p['id']}", use_container_width=True):
+                                    for item in st.session_state["agendamentos"]:
+                                        if item["id"] == p["id"]:
+                                            item["status"] = "Rejeitado"
+                                    salvar_dados(st.session_state["agendamentos"])
+                                    st.warning("Solicitação rejeitada e atualizada na planilha.")
+                                    st.rerun()
+                else:
+                    st.info("Nenhum pedido pendente na aba de análises.")
+                    
+            with sub_historico:
+                st.markdown("### Registro Geral de Solicitações")
+                df_hist = pd.DataFrame(st.session_state["agendamentos"])
+                if not df_hist.empty:
+                    st.dataframe(df_hist, use_container_width=True)
+                else:
+                    st.info("Nenhum registro encontrado.")
+                    
+        elif senha_digitada != "":
+            st.error("❌ Senha incorreta. Apenas o gestor autorizado possui a senha de acesso.")
+        else:
+            st.info("🔒 Por favor, digite a senha para visualizar o painel gerencial. (Dica: A senha inicial padrão é **1234**).")
