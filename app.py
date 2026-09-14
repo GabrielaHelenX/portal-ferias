@@ -13,9 +13,10 @@ st.set_page_config(
     layout="wide"
 )
 
-# Função para conectar ao banco de dados SQLite local ("banco_ferias.db")
+# Função para conectar ao banco de dados SQLite local com UTF-8 garantido
 def obter_conexao():
     conn = sqlite3.connect("banco_ferias.db", check_same_thread=False)
+    conn.text_factory = str  # Garante leitura correta de acentos e caracteres especiais
     return conn
 
 # Cria a tabela automaticamente se não existir
@@ -455,8 +456,8 @@ if aba_gestor is not None:
                 if not df_hist.empty:
                     st.dataframe(df_hist, width='stretch')
                     
-                    # BOTÃO DE DOWNLOAD DO HISTÓRICO EM PLANILHA (CSV)
-                    csv_data = df_hist.to_csv(index=False).encode('utf-8')
+                    # BOTÃO DE DOWNLOAD DO HISTÓRICO COM UTF-8 CORRETO NO EXCEL/CSV
+                    csv_data = df_hist.to_csv(index=False).encode('utf-8-sig')
                     st.download_button(
                         label="📥 Baixar Histórico Completo (Planilha CSV / Excel)",
                         data=csv_data,
