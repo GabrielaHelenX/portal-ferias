@@ -106,7 +106,6 @@ st.markdown("""
     <style>
     .stApp { background-color: #0F172A; color: #F8FAFC; }
     
-    /* Força a barra lateral a ficar escura com textos claros */
     [data-testid="stSidebar"] {
         background-color: #1E1B4B;
         color: #F8FAFC;
@@ -118,12 +117,10 @@ st.markdown("""
     h1 { color: #F3E8FF !important; font-weight: 800; font-size: 1.8rem !important; }
     h2, h3 { color: #E9D5FF !important; font-weight: 700; }
     
-    /* Textos de inputs e labels gerais */
     label, p, span {
         color: #E2E8F0;
     }
     
-    /* Corrige a cor de fundo e do texto das caixas de texto (como a Justificativa) e inputs */
     textarea, input {
         background-color: #1E293B !important;
         color: #F8FAFC !important;
@@ -213,6 +210,12 @@ def checar_regras(nome_colaborador, dt_inicio, dt_fim):
         
     if feriados_no_periodo:
         avisos.append(f"Feriado(s) identificado(s) no meio do período: {', '.join(feriados_no_periodo)}.")
+
+    # TRAVA ANTIDUPLICIDADE: Verifica se a MESMA pessoa já tem um pedido PENDENTE ou APROVADO no mesmo período exato
+    for reg in st.session_state["agendamentos"]:
+        if reg["colaborador"] == nome_colaborador and str(reg["status"]).strip().lower() in ["pendente", "aprovado"]:
+            if dt_inicio == reg["inicio"] and dt_fim == reg["fim"]:
+                erros.append(f"Você ({nome_colaborador.split()[0]}) já possui uma solicitação idêntica cadastrada (Status: {reg['status']}). Evite duplicidade.")
 
     return erros, avisos
 
@@ -383,7 +386,7 @@ with aba_solicitar:
     
     if enviar:
         if bloqueio:
-            st.error("Envio bloqueado devido a inconsistências nas datas.")
+            st.error("Envio bloqueado devido a duplicidade ou inconsistências nas datas.")
         elif not justificativa.strip():
             st.error("A justificativa é obrigatória.")
         else:
@@ -398,11 +401,15 @@ with aba_solicitar:
                 "status": "Pendente"
             }
             salvar_novo_pedido(novo_pedido)
-            st.success("✅ Solicitação enviada com sucesso! Redirecionando para o calendário...")
             st.balloons()
             
-            st.session_state["agendamentos"] = carregar_dados()
-            st.rerun()
+            # MENSAGEM CLARA E FIXA NA TELA (O usuário precisa clicar para ver/continuar)
+            st.success("🎉 Solicitação enviada com sucesso para aprovação do gestor!")
+            st.info("ℹ️ Seu pedido já está registrado no sistema e aguardando análise. Clique no botão abaixo para voltar ao painel principal.")
+            
+            if st.button("👉 Ir para o Calendário e Acompanhar", key="btn_voltar_home", width='stretch'):
+                st.session_state["agendamentos"] = carregar_dados()
+                st.rerun()
 
 # ---------------------------------------------------------
 # ABA 3: PAINEL DO GESTOR
