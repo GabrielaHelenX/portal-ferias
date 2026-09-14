@@ -25,7 +25,7 @@ def conectar_gsheets():
             sheet = client.open_by_url(sheet_url).sheet1
             return sheet
     except Exception as e:
-        st.sidebar.error(f"Erro de conexão com a planilha: {e}")
+        st.error(f"Erro detalhado de conexão com a planilha: {e}")
         return None
     return None
 
@@ -40,10 +40,9 @@ def carregar_dados():
                 df["fim"] = pd.to_datetime(df["fim"]).dt.date
                 df["id"] = pd.to_numeric(df["id"], errors="coerce")
                 return df.to_dict(orient="records")
-        except Exception:
-            pass
+        except Exception as e:
+            st.warning(f"A planilha está vazia ou com formato diferente. Usando padrão. Detalhe: {e}")
     
-    # Fallback inicial se a planilha estiver vazia ou offline
     return [
         {
             "id": 2,
@@ -67,8 +66,9 @@ def salvar_dados(lista_agendamentos):
             df_novo["inicio"] = pd.to_datetime(df_novo["inicio"]).dt.strftime('%Y-%m-%d')
             df_novo["fim"] = pd.to_datetime(df_novo["fim"]).dt.strftime('%Y-%m-%d')
             sheet.update([df_novo.columns.values.tolist()] + df_novo.values.tolist())
+            st.success("✅ Salvo com sucesso no Google Sheets!")
         except Exception as e:
-            st.error(f"Erro ao salvar na nuvem: {e}")
+            st.error(f"❌ Erro crítico ao salvar na nuvem do Google: {e}")
 
 if "agendamentos" not in st.session_state:
     st.session_state["agendamentos"] = carregar_dados()
@@ -445,4 +445,4 @@ if aba_gestor is not None:
         elif senha_digitada != "":
             st.error("❌ Senha incorreta. Apenas o gestor autorizado possui a senha de acesso.")
         else:
-            st.info("🔒 Por favor, digite a senha para visualizar o painel gerencial. (Dica: A senha inicial padrão é **1234**).")
+            st.info("🔒 Por favor, digite a senha para visualizar o painel gerencial. ")
