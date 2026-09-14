@@ -101,7 +101,7 @@ def excluir_pedido(id_pedido):
 
 st.session_state["agendamentos"] = carregar_dados()
 
-# Estilização Global Forçada (Dark Mode Perfeito & Limpo)
+# Estilização Global Forçada (Dark Mode Perfeito & Caixa de Texto Ajustada)
 st.markdown("""
     <style>
     .stApp { background-color: #0F172A; color: #F8FAFC; }
@@ -121,6 +121,13 @@ st.markdown("""
     /* Textos de inputs e labels gerais */
     label, p, span {
         color: #E2E8F0;
+    }
+    
+    /* Corrige a cor de fundo e do texto das caixas de texto (como a Justificativa) e inputs */
+    textarea, input {
+        background-color: #1E293B !important;
+        color: #F8FAFC !important;
+        border: 1px solid #4C1D95 !important;
     }
     
     .anima-card {
