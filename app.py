@@ -5,7 +5,7 @@ import holidays
 import sqlite3
 
 # ---------------------------------------------------------
-# 1. CONFIGURAÇÃO DA PÁGINA & BANCO DE DADOS SQLite NATIVO
+# 1. CONFIGURAÇÃO DA PÁGINA & BANCO DE DADOS LIMPO
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="Portal de Férias & Ausências | Ânima",
@@ -14,7 +14,8 @@ st.set_page_config(
 )
 
 def obter_conexao():
-    conn = sqlite3.connect("banco_ferias.db", check_same_thread=False)
+    # Usando um novo nome de arquivo para limpar todos os dados de teste antigos
+    conn = sqlite3.connect("banco_ferias_v2.db", check_same_thread=False)
     conn.text_factory = str
     return conn
 
@@ -396,7 +397,7 @@ if aba_gestor is not None:
             if st.button("Salvar Nova Senha", width='stretch'):
                 if nova_senha_input.strip() != "":
                     st.session_state["senha_gestor"] = nova_senha_input.strip()
-                    st.success("✅ senha atualizada com sucesso!")
+                    st.success("✅ Senha atualizada com sucesso!")
                 else:
                     st.error("A senha não pode estar em branco.")
 
@@ -495,4 +496,4 @@ if aba_gestor is not None:
         elif senha_digitada != "":
             st.error("❌ Senha incorreta. Apenas o gestor autorizado possui a senha de acesso.")
         else:
-            st.info("🔒 Por favor, digite a senha para visualizar o painel gerencial. (Dica: A senha inicial padrão é **1234**).")
+            st.info("🔒 Por favor, digite a senha para visualizar o painel gerencial.")
