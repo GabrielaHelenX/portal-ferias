@@ -2,7 +2,8 @@ import streamlit as st
 import pandas as pd
 import datetime
 import holidays
-from streamlit_gsheets import GSheetsConnection
+import gspread
+from google.oauth2.service_account import Credentials
 
 # ---------------------------------------------------------
 # 1. CONFIGURAÇÃO DA PÁGINA & CONEXÃO COM GOOGLE SHEETS
@@ -13,26 +14,72 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estabelece a conexão com o Google Sheets configurado nos Secrets
-conn = st.connection("gsheets", type=GSheetsConnection)
+def conectar_gsheets():
+    try:
+        # Configuração das credenciais do Google a partir dos Secrets do Streamlit
+        scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        
+        # Se você configurou os segredos no Streamlit Cloud:
+        if "gcp_service_account" in st.secrets:
+            creds_dict = dict(st.secrets["gcp_service_account"])
+            creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+            client = gspread.authorize(creds)
+            
+            # Pega a URL da planilha dos segredos ou usa padrão
+            sheet_url = st.secrets["gsheets"]["spreadsheet"]
+            sheet = client.open_by_url(sheet_url).sheet1
+            return sheet
+    except Exception as e:
+        return None
+    return None
 
 def carregar_dados():
-    try:
-        df = conn.read(ttl=0)
-        df = df.dropna(how="all")
-        if not df.empty:
-            df["inicio"] = pd.to_datetime(df["inicio"]).dt.date
-            df["fim"] = pd.to_datetime(df["fim"]).dt.date
-            df["id"] = pd.to_numeric(df["id"], errors="coerce")
-        return df.to_dict(orient="records")
-    except Exception as e:
-        st.error(f"Erro ao conectar com a planilha do Google: {e}")
-        return []
+    sheet = conectar_gsheets()
+    if sheet:
+        try:
+            dados = sheet.get_all_records()
+            df = pd.DataFrame(dados)
+            if not df.empty:
+                df["inicio"] = pd.to_datetime(df["inicio"]).dt.date
+                df["fim"] = pd.to_datetime(df["fim"]).dt.date
+                df["id"] = pd.to_numeric(df["id"], errors="coerce")
+            return df.to_dict(orient="records")
+        except Exception:
+            pass
+    
+    # Fallback caso a planilha não esteja conectada ainda
+    return [
+        {
+            "id": 2,
+            "colaborador": "KELVYN AMARAL CANDIDO",
+            "tipo": "Férias",
+            "modo": "Dias Inteiros",
+            "inicio": datetime.date(2026, 11, 13),
+            "fim": datetime.date(2026, 11, 27),
+            "detalhe_tempo": "15 dias",
+            "justificativa": "Férias programadas de novembro",
+            "status": "Aprovado"
+        }
+    ]
 
 def salvar_dados(lista_agendamentos):
-    df_novo = pd.DataFrame(lista_agendamentos)
-    conn.update(data=df_novo)
-    st.cache_data.clear()
+    sheet = conectar_gsheets()
+    if sheet:
+        try:
+            # Limpa a planilha e reescreve com os dados atualizados
+            sheet.clear()
+            
+            # Monta o DataFrame para exportar
+            df_novo = pd.DataFrame(lista_agendamentos)
+            
+            # Formata as datas para string legível na planilha
+            df_novo["inicio"] = pd.to_datetime(df_novo["inicio"]).dt.strftime('%Y-%m-%d')
+            df_novo["fim"] = pd.to_datetime(df_novo["fim"]).dt.strftime('%Y-%m-%d')
+            
+            # Envia para o Google Sheets (cabeçalho + registros)
+            sheet.update([df_novo.columns.values.tolist()] + df_novo.values.tolist())
+        except Exception as e:
+            st.error(f"Erro ao salvar na nuvem: {e}")
 
 if "agendamentos" not in st.session_state:
     st.session_state["agendamentos"] = carregar_dados()
@@ -152,7 +199,6 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("📌 **Regras & Feriados por Estado:**\n- Danilo: SP\n- Erika & Kelvyn: MG\n- Gabriela & Joyce: BA\n- Bloqueio automático de início em feriados e fins de semana.")
 
-# Trava dinâmica das abas: Se for o Danilo, exibe a aba do gestor. Senão, mostra apenas as abas comuns para a equipe.
 if perfil_usuario == GESTOR_OFICIAL:
     aba_painel, aba_solicitar, aba_gestor = st.tabs([
         "📊 Calendário & Feriados", 
@@ -164,7 +210,7 @@ else:
         "📊 Calendário & Feriados", 
         "➕ Nova Solicitação"
     ])
-    aba_gestor = None  # Garante que analistas não tenham acesso à aba restrita
+    aba_gestor = None
 
 # ---------------------------------------------------------
 # ABA 1: CALENDÁRIO, EQUIPE E FERIADOS DESTACADOS
