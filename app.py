@@ -16,20 +16,16 @@ st.set_page_config(
 
 def conectar_gsheets():
     try:
-        # Configuração das credenciais do Google a partir dos Secrets do Streamlit
         scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-        
-        # Se você configurou os segredos no Streamlit Cloud:
         if "gcp_service_account" in st.secrets:
             creds_dict = dict(st.secrets["gcp_service_account"])
             creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
             client = gspread.authorize(creds)
-            
-            # Pega a URL da planilha dos segredos ou usa padrão
             sheet_url = st.secrets["gsheets"]["spreadsheet"]
             sheet = client.open_by_url(sheet_url).sheet1
             return sheet
     except Exception as e:
+        st.sidebar.error(f"Erro de conexão com a planilha: {e}")
         return None
     return None
 
@@ -39,15 +35,15 @@ def carregar_dados():
         try:
             dados = sheet.get_all_records()
             df = pd.DataFrame(dados)
-            if not df.empty:
+            if not df.empty and "id" in df.columns:
                 df["inicio"] = pd.to_datetime(df["inicio"]).dt.date
                 df["fim"] = pd.to_datetime(df["fim"]).dt.date
                 df["id"] = pd.to_numeric(df["id"], errors="coerce")
-            return df.to_dict(orient="records")
+                return df.to_dict(orient="records")
         except Exception:
             pass
     
-    # Fallback caso a planilha não esteja conectada ainda
+    # Fallback inicial se a planilha estiver vazia ou offline
     return [
         {
             "id": 2,
@@ -66,17 +62,10 @@ def salvar_dados(lista_agendamentos):
     sheet = conectar_gsheets()
     if sheet:
         try:
-            # Limpa a planilha e reescreve com os dados atualizados
             sheet.clear()
-            
-            # Monta o DataFrame para exportar
             df_novo = pd.DataFrame(lista_agendamentos)
-            
-            # Formata as datas para string legível na planilha
             df_novo["inicio"] = pd.to_datetime(df_novo["inicio"]).dt.strftime('%Y-%m-%d')
             df_novo["fim"] = pd.to_datetime(df_novo["fim"]).dt.strftime('%Y-%m-%d')
-            
-            # Envia para o Google Sheets (cabeçalho + registros)
             sheet.update([df_novo.columns.values.tolist()] + df_novo.values.tolist())
         except Exception as e:
             st.error(f"Erro ao salvar na nuvem: {e}")
@@ -190,10 +179,7 @@ st.divider()
 
 with st.sidebar:
     st.markdown("### 👤 Identificação")
-    perfil_usuario = st.selectbox(
-        "Quem está acessando?", 
-        EQUIPE
-    )
+    perfil_usuario = st.selectbox("Quem está acessando?", EQUIPE)
     local_atual = EQUIPE_DETALHES[perfil_usuario]["local"]
     st.info(f"Logado como: **{perfil_usuario.split()[0]}**\n📍 Base: {local_atual}")
     st.markdown("---")
@@ -213,7 +199,7 @@ else:
     aba_gestor = None
 
 # ---------------------------------------------------------
-# ABA 1: CALENDÁRIO, EQUIPE E FERIADOS DESTACADOS
+# ABA 1: CALENDÁRIO
 # ---------------------------------------------------------
 with aba_painel:
     st.subheader("Painel de Controle & Calendário da Equipe")
@@ -347,7 +333,7 @@ with aba_solicitar:
         for a in avisos:
             st.warning(f"⚠️ {a}")
             
-    enviar = st.button("🚀 Enviar Solicitação para Aprovação", use_container_width=True)
+    enviar = st.button("🚀 Enviar Solicitação para Aprovação", width='stretch')
     
     if enviar:
         if bloqueio:
@@ -374,7 +360,7 @@ with aba_solicitar:
             st.rerun()
 
 # ---------------------------------------------------------
-# ABA 3: PAINEL DO GESTOR (Exclusivo para o Danilo)
+# ABA 3: PAINEL DO GESTOR
 # ---------------------------------------------------------
 if aba_gestor is not None:
     with aba_gestor:
@@ -383,7 +369,7 @@ if aba_gestor is not None:
         
         with st.expander("🔑 Configurar ou Alterar Senha de Acesso (Gestor)", expanded=False):
             nova_senha_input = st.text_input("Definir Nova Senha para o Painel", type="password", placeholder="Digite a nova senha...")
-            if st.button("Salvar Nova Senha"):
+            if st.button("Salvar Nova Senha", width='stretch'):
                 if nova_senha_input.strip() != "":
                     st.session_state["senha_gestor"] = nova_senha_input.strip()
                     st.success("✅ Senha atualizada com sucesso!")
@@ -430,7 +416,7 @@ if aba_gestor is not None:
                             
                             b1, b2 = st.columns(2)
                             with b1:
-                                if st.button(f"✅ Aprovar #{p['id']}", key=f"ok_{p['id']}", use_container_width=True):
+                                if st.button(f"✅ Aprovar #{p['id']}", key=f"ok_{p['id']}", width='stretch'):
                                     for item in st.session_state["agendamentos"]:
                                         if item["id"] == p["id"]:
                                             item["status"] = "Aprovado"
@@ -438,7 +424,7 @@ if aba_gestor is not None:
                                     st.success(f"Solicitação de {p['colaborador'].split()[0]} aprovada e salva na nuvem!")
                                     st.rerun()
                             with b2:
-                                if st.button(f"❌ Rejeitar #{p['id']}", key=f"no_{p['id']}", use_container_width=True):
+                                if st.button(f"❌ Rejeitar #{p['id']}", key=f"no_{p['id']}", width='stretch'):
                                     for item in st.session_state["agendamentos"]:
                                         if item["id"] == p["id"]:
                                             item["status"] = "Rejeitado"
@@ -452,7 +438,7 @@ if aba_gestor is not None:
                 st.markdown("### Registro Geral de Solicitações")
                 df_hist = pd.DataFrame(st.session_state["agendamentos"])
                 if not df_hist.empty:
-                    st.dataframe(df_hist, use_container_width=True)
+                    st.dataframe(df_hist, width='stretch')
                 else:
                     st.info("Nenhum registro encontrado.")
                     
